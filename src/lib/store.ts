@@ -23,7 +23,7 @@ import { DEFAULT_SCORING } from "@/lib/scoring";
 const STORAGE_KEY = "quiniela-mundial-2026:v1";
 
 const DEFAULT_SETTINGS: PoolSettings = {
-  name: "Quiniela Los Reyes Tires",
+  name: "Quiniela Mundial 2026",
   currency: "MXN",
   joinCode: "GOL2026",
   buyIns: { premium: 600, mid: 400, value: 250 },

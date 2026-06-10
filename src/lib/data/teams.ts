@@ -119,3 +119,19 @@ export function flagUrl(teamId: string): string {
   const iso = FLAG_ISO[teamId];
   return iso ? `https://flagcdn.com/${iso}.svg` : "";
 }
+
+// ── Custom crest overrides ───────────────────────────────────────────────
+// Drop your own crest images into /public/crests named by team id, e.g.
+// /public/crests/BRA.png, then add that id below. Any team listed here uses
+// its custom image; everything else falls back to the country flag, and if a
+// custom image fails to load it also falls back to the flag automatically.
+// (You supply the artwork — see /public/crests/README.txt.)
+export const CUSTOM_CRESTS = new Set<string>([
+  // "BRA", "ARG", "ESP", ...
+]);
+
+export const CREST_EXT = "png"; // png | svg | webp
+
+export function crestOverrideUrl(teamId: string): string | null {
+  return CUSTOM_CRESTS.has(teamId) ? `/crests/${teamId}.${CREST_EXT}` : null;
+}

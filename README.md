@@ -1,7 +1,7 @@
-# Quiniela Los Reyes Tires · 2026 ⚽
+# Quiniela Mundial 2026 ⚽
 
-A private, mobile-first World Cup 2026 pool presented by **Los Reyes Tires**.
-Built with Next.js (App Router) + Tailwind + shadcn-style components. Fully
+A private, mobile-first World Cup 2026 pool for friends & family. Built with
+Next.js (App Router) + Tailwind + shadcn-style components. Fully
 **bilingual (Spanish / English)** — auto-detects the device language, defaults
 to Spanish, and has a one-tap ES/EN toggle. Runs fully on your machine with
 **zero backend** today; structured to drop Supabase in later.
@@ -84,17 +84,46 @@ supabase/
   schema.sql      # drop-in Postgres schema for multi-device play
 ```
 
-## Going online with Supabase (later)
+## Multi-device with Supabase
 
-The whole app reads/writes through `loadState` / `saveState` in
-`src/lib/store.ts` and the action helpers in `src/components/pool-provider.tsx`.
-To go multi-device:
+The app runs on localStorage by default (single device). To sync across phones
+and laptops, point it at a Supabase project — no code changes needed:
 
-1. Create a Supabase project and run `supabase/schema.sql`.
-2. `npm install @supabase/supabase-js`, add your URL + anon key to `.env.local`.
-3. Replace the bodies of `loadState`/`saveState` (and the mutation helpers) with
-   Supabase queries. The team/group/fixture data stays in `src/lib/data` — it
-   never changes. Nothing in the UI needs to change.
+1. In your Supabase project, open the **SQL editor** and run
+   `supabase/schema.sql`. It creates one `pool_state` table, enables Realtime,
+   and sets friendly access policies.
+2. Copy `.env.example` to `.env.local` and fill in:
+   - `NEXT_PUBLIC_SUPABASE_URL` — your project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Settings → API → `anon` `public` key
+3. Restart `npm run dev`. The whole pool now lives in Supabase and updates live
+   on every device. Leave the keys blank to go back to localStorage-only.
+
+How it works: the entire pool is stored as a single JSON document
+(`src/lib/supabase.ts`); every change is upserted and Realtime pushes it to the
+other devices. Simple and ample for a ~12-person pool. (Heavy simultaneous
+edits use last-write-wins on the document — fine here, since results are
+entered by one organizer and picks happen over days.)
+
+## Deploy to Cloudflare Pages
+
+The app is a fully client-side static site (`output: "export"` in
+`next.config.mjs`), so it deploys as plain static files — no Workers adapter
+needed. In the Cloudflare dashboard:
+
+1. **Workers & Pages → Create → Pages → Connect to Git**, pick the
+   `quiniela-mundial-2026` repo.
+2. Framework preset: **Next.js (Static HTML Export)** (or set it manually):
+   - Build command: `npx next build`
+   - Build output directory: `out`
+3. Add **Environment variables** (Settings → Variables, for Production *and*
+   Preview) — these are read at build time:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_POOL_ID` = `default`
+4. Save & Deploy. Every push to `main` redeploys automatically.
+
+(These `NEXT_PUBLIC_*` values get baked into the public bundle — expected and
+safe; the anon key is a browser key by design.)
 
 ## Data source
 
@@ -105,4 +134,4 @@ the Results flow — or just have the organizer enter results, which is plenty f
 a family pool.
 
 ---
-Presented by Los Reyes Tires. ¡Que gane el mejor! 🏆
+A private family & friends pool. ¡Que gane el mejor! 🏆

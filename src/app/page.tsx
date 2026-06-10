@@ -65,10 +65,7 @@ export default function LandingPage() {
     <div className="min-h-screen">
       <section className="pitch-stripes text-primary-foreground">
         <div className="container relative z-10 py-14 md:py-20">
-          <div className="mb-6 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-white/70">
-              {t("brand.kicker")}
-            </span>
+          <div className="mb-6 flex items-center justify-end">
             <LangToggle variant="onDark" />
           </div>
           <Badge className="bg-white/15 text-white hover:bg-white/15">

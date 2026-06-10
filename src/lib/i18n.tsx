@@ -15,9 +15,9 @@ type Dict = Record<string, string>;
 
 const EN: Dict = {
   // brand / common
-  "brand.tagline": "Presented by Los Reyes Tires",
+  "brand.tagline": "A private World Cup pool",
   "brand.event": "FIFA World Cup 2026",
-  "brand.kicker": "Los Reyes Tires",
+  "brand.kicker": "Private pool",
   "nav.home": "Home",
   "nav.table": "Table",
   "nav.fixtures": "Fixtures",
@@ -182,9 +182,9 @@ const EN: Dict = {
 };
 
 const ES: Dict = {
-  "brand.tagline": "Presentado por Los Reyes Tires",
+  "brand.tagline": "Una quiniela privada del Mundial",
   "brand.event": "Copa Mundial FIFA 2026",
-  "brand.kicker": "Los Reyes Tires",
+  "brand.kicker": "Quiniela privada",
   "nav.home": "Inicio",
   "nav.table": "Tabla",
   "nav.fixtures": "Partidos",

@@ -1,61 +1,32 @@
 -- ───────────────────────────────────────────────────────────────────────────
---  Quiniela Mundial 2026 — Supabase schema (drop-in for multi-device play)
+--  Quiniela Mundial 2026 — Supabase schema
 -- ───────────────────────────────────────────────────────────────────────────
---  The app currently runs fully on localStorage (see src/lib/store.ts). To go
---  online, create a Supabase project, run this schema, and swap the bodies of
---  loadState() / saveState() (and the action helpers) for Supabase queries.
---  Team/group/fixture data stays in code (src/lib/data) — it never changes.
+--  The app stores the entire pool as ONE JSON document per pool (simple and
+--  perfect for a ~12-person private pool). Run this in the Supabase SQL editor.
+--  Then turn on Realtime for the table and set the API keys in .env.local.
+-- ───────────────────────────────────────────────────────────────────────────
 
-create table if not exists pools (
-  id            uuid primary key default gen_random_uuid(),
-  name          text not null,
-  currency      text not null default 'MXN',
-  join_code     text not null,
-  buy_in_premium int not null default 600,
-  buy_in_mid     int not null default 400,
-  buy_in_value   int not null default 250,
-  scoring        jsonb not null,           -- ScoringConfig
-  actual_champion_id text,
-  actual_top_scorer  text,
-  created_at    timestamptz not null default now()
+create table if not exists pool_state (
+  id          text primary key,          -- matches NEXT_PUBLIC_POOL_ID ("default")
+  data        jsonb not null,            -- the full PoolState document
+  updated_at  timestamptz not null default now()
 );
 
-create table if not exists packages (
-  id          text not null,               -- e.g. 'PKG-01'
-  pool_id     uuid not null references pools(id) on delete cascade,
-  label       text not null,
-  tier        text not null check (tier in ('premium','mid','value')),
-  buy_in      int  not null,
-  team_ids    text[] not null,             -- 4 team ids
-  primary key (pool_id, id)
-);
+-- Push row changes to connected clients (multi-device sync).
+alter publication supabase_realtime add table pool_state;
 
-create table if not exists participants (
-  id             uuid primary key default gen_random_uuid(),
-  pool_id        uuid not null references pools(id) on delete cascade,
-  name           text not null,
-  pin            text not null,            -- 4-digit; hash in production
-  package_id     text,
-  is_moderator   boolean not null default false,
-  pred_champion_id  text,
-  pred_top_scorer   text,
-  pred_dark_horse_id text,
-  joined_at      timestamptz not null default now(),
-  unique (pool_id, name)
-);
+-- ── Access control ──────────────────────────────────────────────────────────
+-- This is a PRIVATE pool guarded by the app's own name+PIN screen, and the
+-- anon key is public by design. The simplest setup lets the anon role read and
+-- write this single table. Fine for friends & family. If you want it locked
+-- down harder later, switch to Supabase Auth and gate writes to the moderator.
+alter table pool_state enable row level security;
 
--- One row per team per pool, updated by the moderator.
-create table if not exists team_results (
-  pool_id       uuid not null references pools(id) on delete cascade,
-  team_id       text not null,             -- e.g. 'ARG'
-  group_wins    int not null default 0,
-  group_draws   int not null default 0,
-  group_losses  int not null default 0,
-  stage_reached text not null default 'group',
-  primary key (pool_id, team_id)
-);
+create policy "anon read pool" on pool_state
+  for select using (true);
 
--- Suggested RLS sketch (enable + refine before going public):
---   alter table participants enable row level security;
---   create policy "read pool" on participants for select using (true);
---   Writes to team_results / pools restricted to the moderator participant.
+create policy "anon upsert pool" on pool_state
+  for insert with check (true);
+
+create policy "anon update pool" on pool_state
+  for update using (true) with check (true);

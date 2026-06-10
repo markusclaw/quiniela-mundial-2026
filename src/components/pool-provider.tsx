@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -24,6 +25,12 @@ import {
   uid,
 } from "@/lib/store";
 import { buildPackages } from "@/lib/packages";
+import {
+  isSupabaseEnabled,
+  loadRemote,
+  saveRemote,
+  subscribeRemote,
+} from "@/lib/supabase";
 
 const SESSION_KEY = "quiniela-mundial-2026:session";
 
@@ -72,26 +79,69 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
+  // Tracks the last JSON we wrote/received so realtime echoes don't loop.
+  const lastJsonRef = useRef<string>("");
+
+  // Persist a state snapshot to the active backend (Supabase or localStorage).
+  const persist = useCallback((next: PoolState) => {
+    lastJsonRef.current = JSON.stringify(next);
+    if (isSupabaseEnabled) saveRemote(next);
+    else saveState(next);
+  }, []);
+
   useEffect(() => {
-    setStateRaw(loadState());
     setSessionId(window.localStorage.getItem(SESSION_KEY));
+
+    if (isSupabaseEnabled) {
+      let unsub = () => {};
+      loadRemote()
+        .then((remote) => {
+          if (remote) {
+            lastJsonRef.current = JSON.stringify(remote);
+            setStateRaw(remote);
+          } else {
+            // First run on a fresh project — seed the document.
+            const initial = createInitialState();
+            lastJsonRef.current = JSON.stringify(initial);
+            setStateRaw(initial);
+            saveRemote(initial);
+          }
+        })
+        .catch(() => setStateRaw(loadState()))
+        .finally(() => {
+          setReady(true);
+          unsub = subscribeRemote((incoming) => {
+            const json = JSON.stringify(incoming);
+            if (json === lastJsonRef.current) return; // ignore our own echo
+            lastJsonRef.current = json;
+            setStateRaw(incoming);
+          });
+        });
+      return () => unsub();
+    }
+
+    // localStorage-only mode
+    setStateRaw(loadState());
     setReady(true);
   }, []);
 
-  const commit = useCallback((next: PoolState) => {
-    setStateRaw(next);
-    saveState(next);
-  }, []);
+  const commit = useCallback(
+    (next: PoolState) => {
+      setStateRaw(next);
+      persist(next);
+    },
+    [persist],
+  );
 
   const update = useCallback(
     (fn: (prev: PoolState) => PoolState) => {
       setStateRaw((prev) => {
         const next = fn(prev);
-        saveState(next);
+        persist(next);
         return next;
       });
     },
-    [],
+    [persist],
   );
 
   const setSession = useCallback((id: string | null) => {
