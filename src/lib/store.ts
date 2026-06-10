@@ -22,6 +22,10 @@ import { DEFAULT_SCORING } from "@/lib/scoring";
 
 const STORAGE_KEY = "quiniela-mundial-2026:v1";
 
+// The organizer's PIN. Hardwired in code (there's no UI to change it) and
+// re-applied on every load so it always works, even on older saved pools.
+export const ORGANIZER_PIN = "3389";
+
 const DEFAULT_SETTINGS: PoolSettings = {
   name: "Quiniela Mundial 2026",
   currency: "MXN",
@@ -62,7 +66,7 @@ export function createInitialState(): PoolState {
       {
         id: "mod",
         name: "Organizer",
-        pin: "0000",
+        pin: ORGANIZER_PIN,
         packageId: null,
         isModerator: true,
         joinedAt: Date.now(),
@@ -99,6 +103,9 @@ export function migrateState(s: PoolState): PoolState {
   }
   delete settings.buyIns;
   if (!s.teamOwners) s.teamOwners = {};
+  // Always re-assert the organizer PIN so login works on any saved pool.
+  const mod = s.participants?.find((p) => p.isModerator);
+  if (mod) mod.pin = ORGANIZER_PIN;
   // Rebuild packages so composition/prices match the current mode.
   // PKG ids stay stable (PKG-01..12), so package assignments survive.
   s.packages = buildPackagesFor(settings);
@@ -147,7 +154,7 @@ export function seedDemo(): PoolState {
   state.participants = DEMO_NAMES.map((name, i) => ({
     id: i === 0 ? "mod" : uid(),
     name,
-    pin: i === 0 ? "0000" : undefined,
+    pin: i === 0 ? ORGANIZER_PIN : undefined,
     packageId: pkgs[i % pkgs.length].id,
     isModerator: i === 0,
     joinedAt: Date.now() - i * 1000,
