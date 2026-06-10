@@ -31,6 +31,17 @@ const EN: Dict = {
   "common.save": "Save",
   "common.pot": "Pot {n}",
 
+  // auto-sync
+  "sync.live": "Live",
+  "sync.syncing": "Updating…",
+  "sync.tooltip": "Results update automatically. Tap to refresh now.",
+  "admin.results.autoTitle": "Automatic results",
+  "admin.results.autoNote":
+    "Results update automatically from a free public feed — nobody needs to enter scores. Use the fields below only to fix or override a result.",
+  "admin.results.syncNow": "Sync now",
+  "admin.results.manualBadge": "manual",
+  "admin.results.revert": "Auto",
+
   // landing
   "landing.badge": "Private pool · 48 teams",
   "landing.title": "World Cup 2026\nQuiniela.",
@@ -197,6 +208,16 @@ const ES: Dict = {
   "common.edit": "Editar",
   "common.save": "Guardar",
   "common.pot": "Bombo {n}",
+
+  "sync.live": "En vivo",
+  "sync.syncing": "Actualizando…",
+  "sync.tooltip": "Los resultados se actualizan solos. Toca para actualizar ahora.",
+  "admin.results.autoTitle": "Resultados automáticos",
+  "admin.results.autoNote":
+    "Los resultados se actualizan solos desde una fuente pública gratuita — nadie tiene que capturar marcadores. Usa los campos de abajo solo para corregir o sobrescribir un resultado.",
+  "admin.results.syncNow": "Actualizar ahora",
+  "admin.results.manualBadge": "manual",
+  "admin.results.revert": "Auto",
 
   "landing.badge": "Quiniela privada · 48 equipos",
   "landing.title": "Quiniela\nMundial 2026.",

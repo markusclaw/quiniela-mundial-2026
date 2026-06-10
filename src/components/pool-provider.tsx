@@ -15,7 +15,9 @@ import type {
   PoolState,
   ScoringConfig,
   Stage,
+  TeamResult,
 } from "@/lib/types";
+import { fetchResults } from "@/lib/results-sync";
 import {
   createInitialState,
   loadState,
@@ -64,6 +66,11 @@ interface PoolContextValue {
       stageReached: Stage;
     }>,
   ) => void;
+  clearManual: (teamId: string) => void;
+  applyAutoResults: (results: Record<string, Partial<TeamResult>>) => void;
+  syncNow: () => Promise<boolean>;
+  syncing: boolean;
+  lastSync: number | null;
   setActuals: (championId: string | null, topScorer: string | null) => void;
   updateSettings: (patch: Partial<PoolSettings>) => void;
   updateScoring: (patch: Partial<ScoringConfig>) => void;
@@ -78,6 +85,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   const [state, setStateRaw] = useState<PoolState>(createInitialState);
   const [ready, setReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<number | null>(null);
 
   // Tracks the last JSON we wrote/received so realtime echoes don't loop.
   const lastJsonRef = useRef<string>("");
@@ -277,12 +286,68 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         results: {
           ...prev.results,
-          [teamId]: { ...prev.results[teamId], ...patch },
+          // A manual edit pins the team so auto-sync won't overwrite it.
+          [teamId]: { ...prev.results[teamId], ...patch, manual: true },
         },
       }));
     },
     [update],
   );
+
+  // Revert a team back to auto-synced results.
+  const clearManual = useCallback(
+    (teamId: string) => {
+      update((prev) => ({
+        ...prev,
+        results: {
+          ...prev.results,
+          [teamId]: { ...prev.results[teamId], manual: false },
+        },
+      }));
+    },
+    [update],
+  );
+
+  // Merge web-synced results in, leaving manually-pinned teams untouched.
+  const applyAutoResults = useCallback(
+    (incoming: Record<string, Partial<TeamResult>>) => {
+      update((prev) => {
+        const results = { ...prev.results };
+        let changed = false;
+        for (const [teamId, patch] of Object.entries(incoming)) {
+          const cur = results[teamId];
+          if (!cur || cur.manual) continue;
+          const next = { ...cur, ...patch };
+          if (
+            next.groupWins !== cur.groupWins ||
+            next.groupDraws !== cur.groupDraws ||
+            next.groupLosses !== cur.groupLosses ||
+            next.stageReached !== cur.stageReached
+          ) {
+            results[teamId] = next;
+            changed = true;
+          }
+        }
+        return changed ? { ...prev, results } : prev;
+      });
+    },
+    [update],
+  );
+
+  const syncNow = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const data = await fetchResults();
+      if (data) {
+        applyAutoResults(data.results);
+        setLastSync(Date.now());
+        return true;
+      }
+      return false;
+    } finally {
+      setSyncing(false);
+    }
+  }, [applyAutoResults]);
 
   const setActuals = useCallback(
     (championId: string | null, topScorer: string | null) => {
@@ -341,6 +406,11 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     addParticipant,
     removeParticipant,
     setTeamResult,
+    clearManual,
+    applyAutoResults,
+    syncNow,
+    syncing,
+    lastSync,
     setActuals,
     updateSettings,
     updateScoring,

@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { usePool } from "@/components/pool-provider";
 import { LangToggle } from "@/components/lang-toggle";
+import { ResultsAutoSync, SyncIndicator } from "@/components/sync-indicator";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 
@@ -67,6 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2">
+            <SyncIndicator className="hidden sm:inline-flex" />
             <LangToggle />
             {me && (
               <span className="hidden text-sm text-muted-foreground sm:inline">
@@ -84,6 +86,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+
+      <ResultsAutoSync />
 
       <main className="container animate-fade-up py-6">{children}</main>
 

@@ -79,11 +79,24 @@ function AdminInner() {
 }
 
 function ResultsTab() {
-  const { state, setTeamResult } = usePool();
+  const { state, setTeamResult, clearManual, syncNow, syncing } = usePool();
   const { t } = useT();
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t("admin.results.desc")}</p>
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="flex-1">
+            <div className="font-semibold">{t("admin.results.autoTitle")}</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("admin.results.autoNote")}
+            </p>
+          </div>
+          <Button variant="secondary" onClick={() => void syncNow()} disabled={syncing}>
+            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            {t("admin.results.syncNow")}
+          </Button>
+        </CardContent>
+      </Card>
       {GROUP_IDS.map((g) => (
         <Card key={g}>
           <CardHeader className="pb-2">
@@ -141,6 +154,16 @@ function ResultsTab() {
                       </option>
                     ))}
                   </Select>
+                  {r.manual && (
+                    <button
+                      onClick={() => clearManual(tm.id)}
+                      title={t("admin.results.revert")}
+                      className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-1 text-[11px] font-semibold text-gold-foreground hover:bg-gold/25"
+                    >
+                      {t("admin.results.manualBadge")}
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
               );
             })}

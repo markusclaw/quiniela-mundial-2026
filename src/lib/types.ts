@@ -36,13 +36,14 @@ export type Stage =
   | "champion"
   | "eliminated";
 
-// Per-team live result tracked by the moderator
+// Per-team live result (auto-synced from the web, or set by the moderator)
 export interface TeamResult {
   teamId: string;
   groupWins: number;
   groupDraws: number;
   groupLosses: number;
   stageReached: Stage; // furthest stage reached / eliminated
+  manual?: boolean; // true = moderator-edited; auto-sync won't overwrite it
 }
 
 export interface Participant {
