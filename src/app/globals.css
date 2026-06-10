@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --background: 40 33% 98%;
+    --foreground: 160 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 25% 10%;
+
+    /* Pitch green */
+    --primary: 158 64% 22%;
+    --primary-foreground: 40 33% 98%;
+
+    --secondary: 158 20% 94%;
+    --secondary-foreground: 158 40% 18%;
+
+    --muted: 150 12% 95%;
+    --muted-foreground: 160 8% 42%;
+
+    --accent: 158 30% 92%;
+    --accent-foreground: 158 50% 16%;
+
+    /* Warm gold for trophies / highlights */
+    --gold: 38 78% 52%;
+    --gold-foreground: 40 40% 12%;
+
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 12% 88%;
+    --input: 150 12% 88%;
+    --ring: 158 64% 22%;
+
+    --radius: 0.85rem;
+  }
+
+  .dark {
+    --background: 162 30% 7%;
+    --foreground: 40 20% 96%;
+    --card: 162 26% 10%;
+    --card-foreground: 40 20% 96%;
+    --popover: 162 26% 10%;
+    --popover-foreground: 40 20% 96%;
+    --primary: 152 55% 45%;
+    --primary-foreground: 162 40% 8%;
+    --secondary: 160 18% 16%;
+    --secondary-foreground: 40 20% 96%;
+    --muted: 160 16% 15%;
+    --muted-foreground: 150 10% 65%;
+    --accent: 160 20% 18%;
+    --accent-foreground: 40 20% 96%;
+    --gold: 38 80% 56%;
+    --gold-foreground: 40 40% 10%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 160 16% 18%;
+    --input: 160 16% 18%;
+    --ring: 152 55% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Subtle pitch-stripe texture for hero sections */
+.pitch-stripes {
+  background-image: linear-gradient(
+    100deg,
+    hsl(var(--primary)) 0%,
+    hsl(158 60% 18%) 100%
+  );
+  position: relative;
+  overflow: hidden;
+}
+.pitch-stripes::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.04) 0px,
+    rgba(255, 255, 255, 0.04) 2px,
+    transparent 2px,
+    transparent 56px
+  );
+  pointer-events: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
