@@ -1,123 +1,105 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { Trophy, Target, Flame, Crown, Pencil, Check } from "lucide-react";
-import { RequireAuth } from "@/components/require-auth";
+import { Trophy, Users, Crown, Medal, ArrowRight } from "lucide-react";
+import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
-import { TeamChip } from "@/components/team-chip";
-import { StageBadge } from "@/components/stage-badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { computeStandings, teamPoints } from "@/lib/scoring";
-import { TEAMS } from "@/lib/data/teams";
-import { formatMoney } from "@/lib/utils";
+import { MatchdayToday } from "@/components/matchday-today";
+import { TeamCrest } from "@/components/team-crest";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn, formatMoney } from "@/lib/utils";
+import { computeStandings, totalPot, ownedTeamIds } from "@/lib/scoring";
+import { getTeam } from "@/lib/data/teams";
 
 function DashboardInner() {
-  const { state, me } = usePool();
+  const { state } = usePool();
   const { t } = useT();
   const standings = useMemo(() => computeStandings(state), [state]);
-  const mine = standings.find((s) => s.participant.id === me?.id);
-  const pkg = state.packages.find((p) => p.id === me?.packageId);
-
-  if (!me) return null;
-
-  if (!pkg) {
-    return (
-      <Card className="mx-auto max-w-md text-center">
-        <CardContent className="space-y-4 p-8">
-          <Trophy className="mx-auto h-8 w-8 text-primary" />
-          <p className="text-sm text-muted-foreground">{t("dash.noPackage")}</p>
-          <Link href="/draw" className={cn(buttonVariants())}>
-            {t("dash.pickMy")}
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const playing = state.participants.filter((p) => p.packageId).length;
+  const pot = totalPot(state);
+  const playing = standings.filter(
+    (s) => ownedTeamIds(s.participant, state).length > 0,
+  );
+  const leader = playing[0];
 
   return (
     <div className="space-y-6">
+      <MatchdayToday />
+
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          icon={Trophy}
-          label={t("dash.rank")}
-          value={`#${mine?.rank ?? "—"}`}
-          sub={t("dash.of", { n: playing })}
-        />
-        <StatCard
-          icon={Flame}
-          label={t("dash.totalPoints")}
-          value={String(mine?.totalPoints ?? 0)}
-          sub={t("dash.teamsPicks", {
-            teams: mine?.teamPointsTotal ?? 0,
-            picks: mine?.prediction.points ?? 0,
-          })}
-        />
-        <StatCard
           icon={Crown}
-          label={t("dash.potShare")}
-          value={formatMoney(mine?.potShare ?? 0, state.settings.currency)}
-          sub={t("dash.owedSoFar")}
+          label={t("home.pot")}
+          value={formatMoney(pot, state.settings.currency)}
+          sub={t("home.potSub")}
           highlight
+        />
+        <StatCard
+          icon={Users}
+          label={t("home.players")}
+          value={String(playing.length)}
+          sub={t("home.playersSub")}
+        />
+        <StatCard
+          icon={Trophy}
+          label={t("home.leader")}
+          value={leader?.participant.name ?? "—"}
+          sub={leader ? t("home.leaderSub", { pts: leader.totalPoints }) : ""}
         />
       </div>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            {pkg.label}
-            <Badge variant="secondary">{t(`tier.${pkg.tier}`)}</Badge>
-          </CardTitle>
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b bg-secondary/60 px-5 py-3">
+          <span className="text-sm font-bold">{t("home.standings")}</span>
           <Link
-            href="/draw"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+            href="/leaderboard"
+            className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
           >
-            {t("common.change")}
+            {t("home.fullTable")} <ArrowRight className="h-3 w-3" />
           </Link>
-        </CardHeader>
-        <CardContent className="divide-y">
-          {pkg.teamIds.map((tid) => {
-            const result = state.results[tid];
-            const bd = teamPoints(result, state.scoring);
+        </div>
+        <CardContent className="divide-y p-0">
+          {playing.slice(0, 5).map((s) => {
+            const teams = ownedTeamIds(s.participant, state);
             return (
-              <div
-                key={tid}
-                className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <TeamChip teamId={tid} size="lg" />
-                  <div className="mt-1 flex items-center gap-2">
-                    <StageBadge stage={result.stageReached} />
-                    {bd.multiplierApplied && (
-                      <Badge variant="gold">{t("dash.underdog")}</Badge>
-                    )}
+              <div key={s.participant.id} className="flex items-center gap-3 px-5 py-3">
+                <RankBadge rank={s.rank} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{s.participant.name}</div>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {teams.map((tid) => {
+                      const out = state.results[tid]?.stageReached === "eliminated";
+                      return (
+                        <span
+                          key={tid}
+                          title={getTeam(tid)?.name}
+                          className={cn(out && "opacity-30 grayscale")}
+                        >
+                          <TeamCrest teamId={tid} size="sm" />
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold">{bd.total}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {t("dash.grpKo", {
-                      grp: bd.groupPoints,
-                      ko: bd.knockoutPoints,
-                    })}
+                  <div className="text-lg font-extrabold leading-none">
+                    {s.totalPoints}
+                  </div>
+                  <div className="text-sm font-semibold text-primary">
+                    {formatMoney(s.potShare, state.settings.currency)}
                   </div>
                 </div>
               </div>
             );
           })}
+          {playing.length === 0 && (
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+              {t("lb.empty")}
+            </p>
+          )}
         </CardContent>
       </Card>
-
-      <PredictionsCard />
     </div>
   );
 }
@@ -141,134 +123,35 @@ function StatCard({
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <Icon className="h-4 w-4" /> {label}
         </div>
-        <div className="mt-1 text-2xl font-extrabold tracking-tight">{value}</div>
+        <div className="mt-1 truncate text-2xl font-extrabold tracking-tight">
+          {value}
+        </div>
         <div className="text-[11px] text-muted-foreground">{sub}</div>
       </CardContent>
     </Card>
   );
 }
 
-function PredictionsCard() {
-  const { state, me, setPredictions } = usePool();
-  const { t } = useT();
-  const [editing, setEditing] = useState(false);
-  const [champ, setChamp] = useState(me?.predChampionId ?? "");
-  const [scorer, setScorer] = useState(me?.predTopScorer ?? "");
-  const [dark, setDark] = useState(me?.predDarkHorseId ?? "");
-
-  if (!me) return null;
-
-  const save = () => {
-    setPredictions(me.id, {
-      predChampionId: champ || null,
-      predTopScorer: scorer || null,
-      predDarkHorseId: dark || null,
-    });
-    setEditing(false);
-  };
-
-  const s = state.scoring;
-  const teamOptions = [...TEAMS].sort((a, b) => a.fifaRank - b.fifaRank);
-
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Target className="h-4 w-4 text-primary" /> {t("dash.bonusPicks")}
-        </CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => (editing ? save() : setEditing(true))}
-        >
-          {editing ? (
-            <>
-              <Check className="h-4 w-4" /> {t("common.save")}
-            </>
-          ) : (
-            <>
-              <Pencil className="h-4 w-4" /> {t("common.edit")}
-            </>
-          )}
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="-mt-2 text-xs text-muted-foreground">{t("dash.bonusDesc")}</p>
-
-        {editing ? (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>{t("dash.champion", { n: s.predChampion })}</Label>
-              <Select value={champ} onChange={(e) => setChamp(e.target.value)}>
-                <option value="">{t("dash.pickTeam")}</option>
-                {teamOptions.map((tm) => (
-                  <option key={tm.id} value={tm.id}>
-                    {tm.flag} {tm.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t("dash.goldenBoot", { n: s.predTopScorer })}</Label>
-              <Input
-                placeholder={t("dash.scorer.ph")}
-                value={scorer}
-                onChange={(e) => setScorer(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t("dash.darkHorse", { n: s.predDarkHorse })}</Label>
-              <Select value={dark} onChange={(e) => setDark(e.target.value)}>
-                <option value="">{t("dash.pickTeam")}</option>
-                {teamOptions
-                  .filter((tm) => tm.pot >= 3)
-                  .map((tm) => (
-                    <option key={tm.id} value={tm.id}>
-                      {tm.flag} {tm.name} ({t("common.pot", { n: tm.pot })})
-                    </option>
-                  ))}
-              </Select>
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <PickRow
-              label={t("dash.pick.champion")}
-              value={me.predChampionId ? <TeamChip teamId={me.predChampionId} /> : "—"}
-            />
-            <PickRow label={t("dash.pick.scorer")} value={me.predTopScorer || "—"} />
-            <PickRow
-              label={t("dash.pick.darkhorse")}
-              value={me.predDarkHorseId ? <TeamChip teamId={me.predDarkHorseId} /> : "—"}
-            />
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PickRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border bg-muted/40 p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
+function RankBadge({ rank }: { rank: number }) {
+  if (rank <= 3) {
+    const colors = ["text-gold", "text-zinc-400", "text-amber-700"];
+    return (
+      <div className="grid h-9 w-9 shrink-0 place-items-center">
+        <Medal className={cn("h-6 w-6", colors[rank - 1])} />
       </div>
-      <div className="mt-1 text-sm font-semibold">{value}</div>
+    );
+  }
+  return (
+    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+      {rank}
     </div>
   );
 }
 
 export default function DashboardPage() {
   return (
-    <RequireAuth>
+    <PublicShell>
       <DashboardInner />
-    </RequireAuth>
+    </PublicShell>
   );
 }

@@ -17,17 +17,14 @@ export const DEFAULT_SCORING: ScoringConfig = {
   final: 34,
   champion: 55,
   underdogMultiplier: 1.5, // Pot 3 & 4 teams on knockout milestones
-  predChampion: 40,
-  predTopScorer: 25,
-  predDarkHorse: 20,
+  // Pot pools by phase — must sum to 1. Paid out as teams advance.
   pool: {
     group: 0.15,
-    r16: 0.1,
-    qf: 0.15,
-    sf: 0.15,
-    final: 0.1,
-    champion: 0.25,
-    predictions: 0.1,
+    r16: 0.12,
+    qf: 0.17,
+    sf: 0.16,
+    final: 0.12,
+    champion: 0.28,
   },
 };
 
@@ -89,65 +86,64 @@ export function teamPoints(
   };
 }
 
-export interface PredictionBreakdown {
-  championHit: boolean;
-  topScorerHit: boolean;
-  // dark horse: team reached at least QF
-  darkHorseHit: boolean;
-  points: number;
-}
-
-export function predictionPoints(
-  p: Participant,
-  state: PoolState,
-): PredictionBreakdown {
-  const s = state.scoring;
-  const championHit =
-    !!p.predChampionId &&
-    !!state.actualChampionId &&
-    p.predChampionId === state.actualChampionId;
-
-  const topScorerHit =
-    !!p.predTopScorer &&
-    !!state.actualTopScorer &&
-    p.predTopScorer.trim().toLowerCase() ===
-      state.actualTopScorer.trim().toLowerCase();
-
-  let darkHorseHit = false;
-  if (p.predDarkHorseId) {
-    const r = state.results[p.predDarkHorseId];
-    if (r) darkHorseHit = reachedAtLeast(r.stageReached, "qf");
-  }
-
-  const points =
-    (championHit ? s.predChampion : 0) +
-    (topScorerHit ? s.predTopScorer : 0) +
-    (darkHorseHit ? s.predDarkHorse : 0);
-
-  return { championHit, topScorerHit, darkHorseHit, points };
-}
-
 export interface ParticipantStanding {
   participant: Participant;
   teamBreakdowns: TeamPointsBreakdown[];
   teamPointsTotal: number;
-  prediction: PredictionBreakdown;
   totalPoints: number;
   potShare: number; // currency owed so far
   rank: number;
 }
 
-/** Total pot = sum of every participant's package buy-in. */
-export function totalPot(state: PoolState): number {
-  return state.participants.reduce((sum, p) => {
+/** Team ids owned by a participant — works in every distribution mode. */
+export function ownedTeamIds(p: Participant, state: PoolState): string[] {
+  if (state.settings.distributionMode === "individual") {
+    const owners = state.teamOwners ?? {};
+    return Object.keys(owners).filter((tid) => owners[tid] === p.id);
+  }
+  const pkg = state.packages.find((k) => k.id === p.packageId);
+  return pkg?.teamIds ?? [];
+}
+
+/** What a participant has paid in, per the active mode. */
+export function participantBuyIn(p: Participant, state: PoolState): number {
+  if (state.settings.distributionMode === "individual") {
+    return ownedTeamIds(p, state).length * state.settings.teamPrice;
+  }
+  const pkg = state.packages.find((k) => k.id === p.packageId);
+  return pkg ? pkg.buyIn : 0;
+}
+
+/** Map of teamId -> owner participant name (active mode aware). */
+export function ownerMap(state: PoolState): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (state.settings.distributionMode === "individual") {
+    const owners = state.teamOwners ?? {};
+    for (const tid of Object.keys(owners)) {
+      const p = state.participants.find((x) => x.id === owners[tid]);
+      if (p) map[tid] = p.name;
+    }
+    return map;
+  }
+  for (const p of state.participants) {
+    if (!p.packageId) continue;
     const pkg = state.packages.find((k) => k.id === p.packageId);
-    return sum + (pkg ? pkg.buyIn : 0);
-  }, 0);
+    pkg?.teamIds.forEach((tid) => (map[tid] = p.name));
+  }
+  return map;
+}
+
+/** Total pot = sum of every participant's buy-in. */
+export function totalPot(state: PoolState): number {
+  return state.participants.reduce(
+    (sum, p) => sum + participantBuyIn(p, state),
+    0,
+  );
 }
 
 /**
- * Distributes each pool proportionally to the points each participant earned in
- * that phase. Phase pools: group, r16, qf, sf, final, champion, predictions.
+ * Distributes each phase pool proportionally to the points each participant
+ * earned in that phase (group, r16, qf, sf, final, champion).
  */
 function distributePot(
   state: PoolState,
@@ -158,7 +154,6 @@ function distributePot(
   const share: Record<string, number> = {};
   standings.forEach((st) => (share[st.participant.id] = 0));
 
-  // Helper: split a pool by a points selector.
   const splitPool = (
     fraction: number,
     selector: (st: Omit<ParticipantStanding, "potShare" | "rank">) => number,
@@ -176,7 +171,7 @@ function distributePot(
   splitPool(s.pool.group, (st) =>
     st.teamBreakdowns.reduce((a, b) => a + b.groupPoints, 0),
   );
-  // Each knockout pool — by knockout points earned at that depth.
+  // Each knockout pool — by number of owned teams that reached that depth.
   const knockoutSelector =
     (depth: Stage) =>
     (st: Omit<ParticipantStanding, "potShare" | "rank">) =>
@@ -190,8 +185,6 @@ function distributePot(
   splitPool(s.pool.sf, knockoutSelector("sf"));
   splitPool(s.pool.final, knockoutSelector("final"));
   splitPool(s.pool.champion, knockoutSelector("champion"));
-  // Predictions pool — by prediction points.
-  splitPool(s.pool.predictions, (st) => st.prediction.points);
 
   return share;
 }
@@ -199,19 +192,16 @@ function distributePot(
 /** Full leaderboard, sorted, with pot shares. */
 export function computeStandings(state: PoolState): ParticipantStanding[] {
   const base = state.participants.map((participant) => {
-    const pkg = state.packages.find((k) => k.id === participant.packageId);
-    const teamBreakdowns = (pkg?.teamIds ?? [])
+    const teamBreakdowns = ownedTeamIds(participant, state)
       .map((tid) => state.results[tid])
       .filter(Boolean)
       .map((r) => teamPoints(r, state.scoring));
     const teamPointsTotal = teamBreakdowns.reduce((a, b) => a + b.total, 0);
-    const prediction = predictionPoints(participant, state);
     return {
       participant,
       teamBreakdowns,
       teamPointsTotal,
-      prediction,
-      totalPoints: teamPointsTotal + prediction.points,
+      totalPoints: teamPointsTotal,
     };
   });
 

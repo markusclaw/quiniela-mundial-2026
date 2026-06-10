@@ -97,6 +97,10 @@ interface RawMatch {
   group?: string;
   team1?: string;
   team2?: string;
+  date?: string;
+  time?: string;
+  num?: number;
+  ground?: string;
   score1?: number;
   score2?: number;
   score?: { ft?: [number, number] };
@@ -217,18 +221,83 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
   return { results, playedGroupMatches, knockoutResolved };
 }
 
-/** Fetch the dataset (trying CDN then raw) and compute results. */
-export async function fetchResults(): Promise<SyncedResults | null> {
+async function fetchMatches(): Promise<RawMatch[] | null> {
   for (const url of SOURCE_URLS) {
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) continue;
       const json = (await res.json()) as { matches?: RawMatch[] };
-      if (!json?.matches) continue;
-      return computeResults(json.matches);
+      if (json?.matches) return json.matches;
     } catch {
       // try next source
     }
   }
   return null;
+}
+
+/** Fetch the dataset (trying CDN then raw) and compute results. */
+export async function fetchResults(): Promise<SyncedResults | null> {
+  const matches = await fetchMatches();
+  return matches ? computeResults(matches) : null;
+}
+
+// ── Fixtures (for the "Today" dashboard card) ────────────────────────────────
+
+export interface FixtureLite {
+  date: string; // YYYY-MM-DD (venue calendar date)
+  kickoff: number | null; // epoch ms, or null if time unparseable
+  label: string; // group ("Group A") or knockout round
+  isKnockout: boolean;
+  venue: string;
+  home: { id: string | null; name: string };
+  away: { id: string | null; name: string };
+  score: [number, number] | null;
+  played: boolean;
+}
+
+// Build an epoch from "2026-06-11" + "13:00 UTC-6".
+function parseKickoff(date?: string, time?: string): number | null {
+  if (!date) return null;
+  const m = (time || "").match(/(\d{1,2}):(\d{2})\s*UTC([+-]\d{1,2})?/i);
+  if (!m) {
+    const d = Date.parse(`${date}T12:00:00Z`);
+    return Number.isNaN(d) ? null : d;
+  }
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  const offset = m[3] ? Number(m[3]) : 0;
+  const [y, mo, d] = date.split("-").map(Number);
+  const utc = Date.UTC(y, mo - 1, d, hh, mm) - offset * 3600000;
+  return Number.isNaN(utc) ? null : utc;
+}
+
+/** A readable team name even when openfootball still uses a placeholder. */
+function displayName(raw?: string): string {
+  if (!raw) return "TBD";
+  return raw;
+}
+
+export function parseFixtures(matches: RawMatch[]): FixtureLite[] {
+  return matches
+    .map((m): FixtureLite => {
+      const score = getScore(m);
+      return {
+        date: m.date ?? "",
+        kickoff: parseKickoff(m.date, m.time),
+        label: m.group ?? m.round ?? "",
+        isKnockout: !m.group,
+        venue: m.ground ?? "",
+        home: { id: toId(m.team1), name: displayName(m.team1) },
+        away: { id: toId(m.team2), name: displayName(m.team2) },
+        score,
+        played: !!score,
+      };
+    })
+    .filter((f) => f.date)
+    .sort((a, b) => (a.kickoff ?? 0) - (b.kickoff ?? 0));
+}
+
+export async function fetchFixtures(): Promise<FixtureLite[] | null> {
+  const matches = await fetchMatches();
+  return matches ? parseFixtures(matches) : null;
 }

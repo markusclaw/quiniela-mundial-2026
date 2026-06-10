@@ -2,13 +2,13 @@
 
 import { useMemo } from "react";
 import { Medal } from "lucide-react";
-import { RequireAuth } from "@/components/require-auth";
+import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { computeStandings, totalPot } from "@/lib/scoring";
+import { computeStandings, totalPot, ownedTeamIds } from "@/lib/scoring";
 import { getTeam } from "@/lib/data/teams";
 import { formatMoney, cn } from "@/lib/utils";
 
@@ -17,7 +17,9 @@ function LeaderboardInner() {
   const { t } = useT();
   const standings = useMemo(() => computeStandings(state), [state]);
   const pot = totalPot(state);
-  const playing = standings.filter((s) => s.participant.packageId);
+  const playing = standings.filter(
+    (s) => ownedTeamIds(s.participant, state).length > 0,
+  );
 
   return (
     <div className="space-y-6">
@@ -35,7 +37,7 @@ function LeaderboardInner() {
 
       <div className="space-y-2">
         {playing.map((s) => {
-          const pkg = state.packages.find((p) => p.id === s.participant.packageId);
+          const teams = ownedTeamIds(s.participant, state);
           const isMe = s.participant.id === me?.id;
           return (
             <Card
@@ -58,7 +60,7 @@ function LeaderboardInner() {
                     )}
                   </div>
                   <div className="mt-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                    {pkg?.teamIds.map((tid) => (
+                    {teams.map((tid) => (
                       <FlagDot key={tid} teamId={tid} state={state} />
                     ))}
                   </div>
@@ -126,8 +128,8 @@ function RankBadge({ rank }: { rank: number }) {
 
 export default function LeaderboardPage() {
   return (
-    <RequireAuth>
+    <PublicShell>
       <LeaderboardInner />
-    </RequireAuth>
+    </PublicShell>
   );
 }

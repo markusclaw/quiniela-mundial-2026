@@ -1,62 +1,43 @@
-import type { Package, Tier } from "@/lib/types";
+import type { DistributionMode, Package, Tier } from "@/lib/types";
 import { teamsByPot } from "@/lib/data/teams";
 
+export interface PackageBuildOpts {
+  mode: DistributionMode;
+  buyIn: number; // flat per-package price (balanced / individual)
+  tierBuyIns: { premium: number; mid: number; value: number };
+}
+
 /**
- * Builds 12 tiered "packages" of 4 teams each — one team from every seeding
- * pot. The package is *tiered* by the strength of its headline (Pot 1) team,
- * which sets the buy-in. To keep things fair, supporting teams are paired in a
- * snake pattern so total package strength stays balanced: a premium headliner
- * gets weaker support, a value headliner gets stronger support. Pot shares are
- * equal weight regardless of buy-in, so a cheap "value" package that runs deep
- * pays the same prize as a premium one — huge upside for the bold.
+ * Builds 12 packages of 4 teams each — one team from every seeding pot.
+ *
+ * - balanced / individual: supporting teams are snake-paired against the
+ *   headliner order, so every bundle is roughly equal strength; flat price.
+ * - tiered: teams are paired in straight rank order, so the top packages are
+ *   genuinely stronger (premium) and priced higher than the value packages.
+ *
+ * (In individual mode the packages aren't used for ownership — teams are
+ * assigned one by one — but we still build them as a harmless default.)
  */
-export function buildPackages(buyIns: {
-  premium: number;
-  mid: number;
-  value: number;
-}): Package[] {
+export function buildPackages(opts: PackageBuildOpts): Package[] {
+  const { mode, buyIn, tierBuyIns } = opts;
   const pot1 = teamsByPot(1); // best -> worst (by FIFA rank)
   const pot2 = teamsByPot(2);
   const pot3 = teamsByPot(3);
   const pot4 = teamsByPot(4);
 
-  // Snake the supporting pots against the headliner ordering to balance value.
-  const pot2r = [...pot2].reverse();
-  const pot4r = [...pot4].reverse();
+  const tieredComposition = mode === "tiered";
+  const pot2x = tieredComposition ? pot2 : [...pot2].reverse();
+  const pot4x = tieredComposition ? pot4 : [...pot4].reverse();
 
   return pot1.map((head, i) => {
     const tier: Tier = i < 4 ? "premium" : i < 8 ? "mid" : "value";
-    const buyIn =
-      tier === "premium"
-        ? buyIns.premium
-        : tier === "mid"
-          ? buyIns.mid
-          : buyIns.value;
-
+    const price = tieredComposition ? tierBuyIns[tier] : buyIn;
     return {
       id: `PKG-${String(i + 1).padStart(2, "0")}`,
       label: `${head.name} Pack`,
       tier,
-      buyIn,
-      teamIds: [head.id, pot2r[i].id, pot3[i].id, pot4r[i].id],
+      buyIn: price,
+      teamIds: [head.id, pot2x[i].id, pot3[i].id, pot4x[i].id],
     };
   });
 }
-
-export const TIER_META: Record<
-  Tier,
-  { label: string; blurb: string }
-> = {
-  premium: {
-    label: "Premium",
-    blurb: "Built around a title favorite. Higher buy-in, better odds.",
-  },
-  mid: {
-    label: "Contender",
-    blurb: "A solid headliner with balanced support. The sweet spot.",
-  },
-  value: {
-    label: "Underdog",
-    blurb: "No favorites — all upside. Cheapest buy-in, biggest payout multiplier.",
-  },
-};

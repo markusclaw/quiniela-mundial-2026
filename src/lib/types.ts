@@ -49,14 +49,10 @@ export interface TeamResult {
 export interface Participant {
   id: string;
   name: string;
-  pin: string;          // 4-digit, local-only auth
+  pin?: string;          // only the organizer uses a PIN; participants don't log in
   packageId: string | null;
   isModerator: boolean;
   joinedAt: number;
-  // Prediction side-game
-  predChampionId: string | null;
-  predTopScorer: string | null;   // free text player name
-  predDarkHorseId: string | null; // team expected to over-perform
 }
 
 export interface ScoringConfig {
@@ -70,10 +66,6 @@ export interface ScoringConfig {
   final: number;
   champion: number;
   underdogMultiplier: number; // applied to knockout milestones for Pot 3/4 teams
-  // prediction points
-  predChampion: number;
-  predTopScorer: number;
-  predDarkHorse: number;
   // pot pool split (must sum to 1)
   pool: {
     group: number;
@@ -82,15 +74,19 @@ export interface ScoringConfig {
     sf: number;
     final: number;
     champion: number;
-    predictions: number;
   };
 }
+
+export type DistributionMode = "balanced" | "tiered" | "individual";
 
 export interface PoolSettings {
   name: string;
   currency: string;
   joinCode: string;
-  buyIns: { premium: number; mid: number; value: number };
+  distributionMode: DistributionMode;
+  buyIn: number; // flat per-package buy-in (balanced mode)
+  teamPrice: number; // per-team price (individual mode)
+  tierBuyIns: { premium: number; mid: number; value: number }; // tiered mode
 }
 
 export interface PoolState {
@@ -99,7 +95,5 @@ export interface PoolState {
   participants: Participant[];
   packages: Package[];
   results: Record<string, TeamResult>; // by teamId
-  // actual tournament answers for prediction grading (moderator-set)
-  actualChampionId: string | null;
-  actualTopScorer: string | null;
+  teamOwners: Record<string, string>; // teamId -> participantId (individual mode)
 }

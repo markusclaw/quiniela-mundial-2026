@@ -1,20 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Check, Lock, Sparkles, TrendingUp } from "lucide-react";
-import { RequireAuth } from "@/components/require-auth";
+import { Scale, User, Circle } from "lucide-react";
+import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamChip } from "@/components/team-chip";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { formatMoney } from "@/lib/utils";
-import { getTeam } from "@/lib/data/teams";
-import type { Package, Tier } from "@/lib/types";
-
-const TIER_ORDER: Tier[] = ["premium", "mid", "value"];
+import { getTeam, GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
+import { ownerMap } from "@/lib/scoring";
+import type { Package } from "@/lib/types";
 
 function PotBadge({ teamId }: { teamId: string }) {
   const { t } = useT();
@@ -28,71 +24,38 @@ function PotBadge({ teamId }: { teamId: string }) {
 }
 
 function DrawInner() {
-  const router = useRouter();
-  const { state, me, choosePackage } = usePool();
+  const { state } = usePool();
   const { t } = useT();
-  const [confirming, setConfirming] = useState<string | null>(null);
+
+  if (state.settings.distributionMode === "individual") return <TeamsView />;
 
   const ownerByPkg: Record<string, string> = {};
   for (const p of state.participants) {
     if (p.packageId) ownerByPkg[p.packageId] = p.name;
   }
 
-  const myPkg = me?.packageId ?? null;
-
-  const pick = (pkgId: string) => {
-    if (!me) return;
-    choosePackage(me.id, pkgId);
-    setConfirming(null);
-    router.push("/dashboard");
-  };
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{t("draw.title")}</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          {t("draw.desc1")}
-          <span className="font-medium text-foreground">{t("draw.descBold")}</span>
-          {t("draw.desc2")}
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <Scale className="h-4 w-4 text-primary" />
+          {t("draw.balancedNote", {
+            price: formatMoney(state.settings.buyIn, state.settings.currency),
+          })}
         </p>
       </div>
 
-      {TIER_ORDER.map((tier) => {
-        const packs = state.packages.filter((p) => p.tier === tier);
-        return (
-          <section key={tier} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                {t(`tier.${tier}`)}
-              </h2>
-              {tier === "value" && (
-                <Badge variant="gold">
-                  <TrendingUp className="mr-1 h-3 w-3" /> {t("draw.underdogBonus")}
-                </Badge>
-              )}
-            </div>
-            <p className="-mt-2 text-xs text-muted-foreground">
-              {t(`tier.${tier}.blurb`)}
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {packs.map((pkg) => (
-                <PackageCard
-                  key={pkg.id}
-                  pkg={pkg}
-                  owner={ownerByPkg[pkg.id]}
-                  isMine={myPkg === pkg.id}
-                  currency={state.settings.currency}
-                  confirming={confirming === pkg.id}
-                  onConfirm={() => setConfirming(pkg.id)}
-                  onCancel={() => setConfirming(null)}
-                  onPick={() => pick(pkg.id)}
-                />
-              ))}
-            </div>
-          </section>
-        );
-      })}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {state.packages.map((pkg) => (
+          <PackageCard
+            key={pkg.id}
+            pkg={pkg}
+            owner={ownerByPkg[pkg.id]}
+            currency={state.settings.currency}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -100,39 +63,21 @@ function DrawInner() {
 function PackageCard({
   pkg,
   owner,
-  isMine,
   currency,
-  confirming,
-  onConfirm,
-  onCancel,
-  onPick,
 }: {
   pkg: Package;
   owner?: string;
-  isMine: boolean;
   currency: string;
-  confirming: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-  onPick: () => void;
 }) {
   const { t } = useT();
-  const taken = !!owner && !isMine;
   return (
-    <Card
-      className={`relative overflow-hidden transition-shadow ${
-        isMine ? "ring-2 ring-primary" : taken ? "opacity-60" : "hover:shadow-md"
-      }`}
-    >
+    <Card className={`overflow-hidden ${owner ? "" : "opacity-90"}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div>
             <div className="text-base font-bold">{pkg.label}</div>
-            <Badge
-              variant={pkg.tier === "value" ? "gold" : "secondary"}
-              className="mt-1"
-            >
-              {t(`tier.${pkg.tier}`)}
+            <Badge variant="secondary" className="mt-1">
+              <Scale className="mr-1 h-3 w-3" /> {t("pkg.balanced")}
             </Badge>
           </div>
           <div className="text-right">
@@ -154,32 +99,14 @@ function PackageCard({
         ))}
 
         <div className="pt-2">
-          {isMine ? (
+          {owner ? (
             <div className="flex items-center justify-center gap-2 rounded-md bg-primary/10 py-2 text-sm font-semibold text-primary">
-              <Check className="h-4 w-4" /> {t("draw.yourPackage")}
-            </div>
-          ) : taken ? (
-            <div className="flex items-center justify-center gap-2 rounded-md bg-muted py-2 text-sm text-muted-foreground">
-              <Lock className="h-3.5 w-3.5" /> {t("draw.takenBy", { name: owner! })}
-            </div>
-          ) : confirming ? (
-            <div className="flex gap-2">
-              <Button size="sm" className="flex-1" onClick={onPick}>
-                {t("common.confirm")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                onClick={onCancel}
-              >
-                {t("common.cancel")}
-              </Button>
+              <User className="h-3.5 w-3.5" /> {owner}
             </div>
           ) : (
-            <Button className="w-full" variant="default" onClick={onConfirm}>
-              <Sparkles className="h-4 w-4" /> {t("draw.choose")}
-            </Button>
+            <div className="flex items-center justify-center gap-2 rounded-md bg-muted py-2 text-sm text-muted-foreground">
+              <Circle className="h-3 w-3" /> {t("pkg.unassigned")}
+            </div>
           )}
         </div>
       </CardContent>
@@ -187,10 +114,64 @@ function PackageCard({
   );
 }
 
+function TeamsView() {
+  const { state } = usePool();
+  const { t } = useT();
+  const owners = ownerMap(state);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{t("draw.title")}</h1>
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <User className="h-4 w-4 text-primary" />
+          {t("draw.individualNote", {
+            price: formatMoney(state.settings.teamPrice, state.settings.currency),
+          })}
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {GROUP_IDS.map((g) => (
+          <Card key={g} className="overflow-hidden">
+            <div className="flex items-center justify-between bg-primary px-3 py-2 text-primary-foreground">
+              <span className="text-xs font-bold uppercase tracking-[0.18em]">
+                {t("fx.group", { g })}
+              </span>
+              <span className="grid h-6 w-6 place-items-center rounded-md bg-white/20 text-sm font-extrabold">
+                {g}
+              </span>
+            </div>
+            <div className="divide-y">
+              {teamsByGroup(g).map((tm) => {
+                const owner = owners[tm.id];
+                return (
+                  <div key={tm.id} className="flex items-center gap-2 px-3 py-2">
+                    <TeamChip teamId={tm.id} className="flex-1" />
+                    {owner ? (
+                      <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+                        <User className="h-3 w-3" /> {owner}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("pkg.unassigned")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DrawPage() {
   return (
-    <RequireAuth>
+    <PublicShell>
       <DrawInner />
-    </RequireAuth>
+    </PublicShell>
   );
 }

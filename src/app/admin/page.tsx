@@ -5,13 +5,12 @@ import {
   Settings,
   Users,
   ClipboardList,
-  Target,
   Trash2,
   RefreshCw,
   Plus,
   Copy,
 } from "lucide-react";
-import { RequireAuth } from "@/components/require-auth";
+import { AdminGate } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamChip } from "@/components/team-chip";
@@ -22,7 +21,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatMoney } from "@/lib/utils";
-import { GROUP_IDS, teamsByGroup, TEAMS } from "@/lib/data/teams";
+import { GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
 import type { Stage } from "@/lib/types";
 
 const STAGE_KEYS: { value: Stage; key: string }[] = [
@@ -36,7 +35,7 @@ const STAGE_KEYS: { value: Stage; key: string }[] = [
   { value: "champion", key: "stage.champion" },
 ];
 
-type Tab = "settings" | "people" | "results" | "answers";
+type Tab = "settings" | "people" | "results";
 
 function AdminInner() {
   const { t } = useT();
@@ -44,7 +43,6 @@ function AdminInner() {
   const tabs: { id: Tab; key: string; icon: React.ElementType }[] = [
     { id: "results", key: "admin.tab.results", icon: ClipboardList },
     { id: "people", key: "admin.tab.people", icon: Users },
-    { id: "answers", key: "admin.tab.answers", icon: Target },
     { id: "settings", key: "admin.tab.settings", icon: Settings },
   ];
 
@@ -72,7 +70,6 @@ function AdminInner() {
 
       {tab === "results" && <ResultsTab />}
       {tab === "people" && <PeopleTab />}
-      {tab === "answers" && <AnswersTab />}
       {tab === "settings" && <SettingsTab />}
     </div>
   );
@@ -175,20 +172,22 @@ function ResultsTab() {
 }
 
 function PeopleTab() {
-  const { state, addParticipant, removeParticipant, choosePackage } = usePool();
+  const { state, addParticipant, removeParticipant, choosePackage, setTeamOwner } =
+    usePool();
   const { t } = useT();
   const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
+  const individual = state.settings.distributionMode === "individual";
+  const ownedCount = (pid: string) =>
+    Object.values(state.teamOwners ?? {}).filter((id) => id === pid).length;
 
   const ownerByPkg: Record<string, string> = {};
   for (const p of state.participants)
     if (p.packageId) ownerByPkg[p.packageId] = p.id;
 
   const add = () => {
-    if (!name.trim() || pin.length < 4) return;
-    addParticipant(name, pin);
+    if (!name.trim()) return;
+    addParticipant(name);
     setName("");
-    setPin("");
   };
 
   return (
@@ -204,18 +203,7 @@ function PeopleTab() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("admin.people.namePh")}
-            />
-          </div>
-          <div className="w-28 space-y-1.5">
-            <Label>{t("admin.people.pin")}</Label>
-            <Input
-              inputMode="numeric"
-              maxLength={4}
-              value={pin}
-              onChange={(e) =>
-                setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              placeholder="1234"
+              onKeyDown={(e) => e.key === "Enter" && add()}
             />
           </div>
           <Button onClick={add}>
@@ -241,26 +229,29 @@ function PeopleTab() {
                   {p.name}
                   {p.isModerator && <Badge variant="muted">org</Badge>}
                 </div>
-                <div className="text-[11px] text-muted-foreground">
-                  PIN {p.pin}
-                </div>
               </div>
-              <Select
-                value={p.packageId ?? ""}
-                onChange={(e) => choosePackage(p.id, e.target.value)}
-                className="h-9 flex-1 min-w-[160px]"
-              >
-                <option value="">{t("admin.people.noPackage")}</option>
-                {state.packages.map((k) => {
-                  const taken = ownerByPkg[k.id] && ownerByPkg[k.id] !== p.id;
-                  return (
-                    <option key={k.id} value={k.id} disabled={!!taken}>
-                      {k.label} · {formatMoney(k.buyIn, state.settings.currency)}
-                      {taken ? t("admin.people.taken") : ""}
-                    </option>
-                  );
-                })}
-              </Select>
+              {individual ? (
+                <span className="flex-1 text-xs text-muted-foreground">
+                  {ownedCount(p.id)} {t("admin.people.teamsCount")}
+                </span>
+              ) : (
+                <Select
+                  value={p.packageId ?? ""}
+                  onChange={(e) => choosePackage(p.id, e.target.value)}
+                  className="h-9 flex-1 min-w-[160px]"
+                >
+                  <option value="">{t("admin.people.noPackage")}</option>
+                  {state.packages.map((k) => {
+                    const taken = ownerByPkg[k.id] && ownerByPkg[k.id] !== p.id;
+                    return (
+                      <option key={k.id} value={k.id} disabled={!!taken}>
+                        {k.label} · {formatMoney(k.buyIn, state.settings.currency)}
+                        {taken ? t("admin.people.taken") : ""}
+                      </option>
+                    );
+                  })}
+                </Select>
+              )}
               {!p.isModerator && (
                 <Button
                   variant="ghost"
@@ -275,50 +266,50 @@ function PeopleTab() {
           ))}
         </CardContent>
       </Card>
-    </div>
-  );
-}
 
-function AnswersTab() {
-  const { state, setActuals } = usePool();
-  const { t } = useT();
-  const [champ, setChamp] = useState(state.actualChampionId ?? "");
-  const [scorer, setScorer] = useState(state.actualTopScorer ?? "");
-  const teamOptions = [...TEAMS].sort((a, b) => a.fifaRank - b.fifaRank);
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{t("admin.answers.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="-mt-1 text-sm text-muted-foreground">
-          {t("admin.answers.desc")}
-        </p>
-        <div className="space-y-1.5">
-          <Label>{t("admin.answers.champion")}</Label>
-          <Select value={champ} onChange={(e) => setChamp(e.target.value)}>
-            <option value="">{t("admin.answers.notDecided")}</option>
-            {teamOptions.map((tm) => (
-              <option key={tm.id} value={tm.id}>
-                {tm.flag} {tm.name}
-              </option>
+      {individual && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("admin.assign.title")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="-mt-1 text-xs text-muted-foreground">
+              {t("admin.assign.note")}
+            </p>
+            {GROUP_IDS.map((g) => (
+              <div key={g} className="space-y-1.5">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                  {t("fx.group", { g })}
+                </div>
+                {teamsByGroup(g).map((tm) => (
+                  <div key={tm.id} className="flex items-center gap-2">
+                    <div className="w-40 shrink-0">
+                      <TeamChip teamId={tm.id} />
+                    </div>
+                    <Select
+                      value={state.teamOwners?.[tm.id] ?? ""}
+                      onChange={(e) =>
+                        setTeamOwner(tm.id, e.target.value || null)
+                      }
+                      className="h-9 flex-1 min-w-[150px]"
+                    >
+                      <option value="">{t("admin.people.unassigned")}</option>
+                      {state.participants
+                        .filter((p) => !p.isModerator)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </Select>
+                  </div>
+                ))}
+              </div>
             ))}
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>{t("admin.answers.scorer")}</Label>
-          <Input
-            value={scorer}
-            onChange={(e) => setScorer(e.target.value)}
-            placeholder={t("admin.answers.scorerPh")}
-          />
-        </div>
-        <Button onClick={() => setActuals(champ || null, scorer || null)}>
-          {t("admin.answers.save")}
-        </Button>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -385,35 +376,90 @@ function SettingsTab() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{t("admin.settings.buyIns")}</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.settings.distMode")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            {(["premium", "mid", "value"] as const).map((tier) => (
-              <div key={tier} className="space-y-1.5">
-                <Label>{t(`tier.${tier}`)}</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={s.buyIns[tier]}
-                  onChange={(e) =>
-                    updateSettings({
-                      buyIns: {
-                        ...s.buyIns,
-                        [tier]: Number(e.target.value) || 0,
-                      },
-                    })
-                  }
-                />
-              </div>
-            ))}
+          <div className="max-w-xs space-y-1.5">
+            <Select
+              value={s.distributionMode}
+              onChange={(e) =>
+                updateSettings({
+                  distributionMode: e.target.value as typeof s.distributionMode,
+                })
+              }
+            >
+              <option value="balanced">{t("mode.balanced")}</option>
+              <option value="tiered">{t("mode.tiered")}</option>
+              <option value="individual">{t("mode.individual")}</option>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t(`mode.${s.distributionMode}.desc`)}
+            </p>
           </div>
-          <Button variant="secondary" onClick={rebuildPackages}>
-            <RefreshCw className="h-4 w-4" /> {t("admin.settings.apply")}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            {t("admin.settings.applyNote")}
-          </p>
+
+          {s.distributionMode === "balanced" && (
+            <div className="max-w-[200px] space-y-1.5">
+              <Label>{t("admin.settings.buyInLabel")}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={s.buyIn}
+                onChange={(e) =>
+                  updateSettings({ buyIn: Number(e.target.value) || 0 })
+                }
+              />
+            </div>
+          )}
+
+          {s.distributionMode === "tiered" && (
+            <div className="grid max-w-md grid-cols-3 gap-3">
+              {(["premium", "mid", "value"] as const).map((tier) => (
+                <div key={tier} className="space-y-1.5">
+                  <Label>{t(`tier.${tier}`)}</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={s.tierBuyIns[tier]}
+                    onChange={(e) =>
+                      updateSettings({
+                        tierBuyIns: {
+                          ...s.tierBuyIns,
+                          [tier]: Number(e.target.value) || 0,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {s.distributionMode === "individual" && (
+            <div className="max-w-[200px] space-y-1.5">
+              <Label>{t("admin.settings.teamPriceLabel")}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={s.teamPrice}
+                onChange={(e) =>
+                  updateSettings({ teamPrice: Number(e.target.value) || 0 })
+                }
+              />
+            </div>
+          )}
+
+          {s.distributionMode !== "individual" && (
+            <>
+              <Button variant="secondary" onClick={rebuildPackages}>
+                <RefreshCw className="h-4 w-4" /> {t("admin.settings.apply")}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {t("admin.settings.applyNote")}
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -443,8 +489,8 @@ function SettingsTab() {
 
 export default function AdminPage() {
   return (
-    <RequireAuth moderatorOnly>
+    <AdminGate>
       <AdminInner />
-    </RequireAuth>
+    </AdminGate>
   );
 }

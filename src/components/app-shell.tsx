@@ -57,32 +57,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 active={pathname === item.href}
               />
             ))}
-            {me?.isModerator && (
-              <NavLink
-                href="/admin"
-                label={t("nav.admin")}
-                icon={Settings}
-                active={pathname === "/admin"}
-              />
-            )}
+            <NavLink
+              href="/admin"
+              label={t("nav.admin")}
+              icon={Settings}
+              active={pathname === "/admin"}
+            />
           </nav>
 
           <div className="flex items-center gap-2">
             <SyncIndicator className="hidden sm:inline-flex" />
             <LangToggle />
-            {me && (
-              <span className="hidden text-sm text-muted-foreground sm:inline">
-                {me.name}
-              </span>
+            {me?.isModerator && (
+              <>
+                <span className="hidden text-sm text-muted-foreground sm:inline">
+                  {me.name}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={logout}
+                  aria-label={t("action.logout")}
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={logout}
-              aria-label={t("action.logout")}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
           </div>
         </div>
       </header>
@@ -103,9 +103,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
           ))}
           <BottomLink
-            href={me?.isModerator ? "/admin" : "/dashboard"}
-            label={me?.isModerator ? t("nav.admin") : t("nav.home")}
-            icon={me?.isModerator ? Settings : Home}
+            href="/admin"
+            label={t("nav.admin")}
+            icon={Settings}
             active={pathname === "/admin"}
           />
         </div>

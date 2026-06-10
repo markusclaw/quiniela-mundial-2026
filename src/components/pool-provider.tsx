@@ -19,14 +19,15 @@ import type {
 } from "@/lib/types";
 import { fetchResults } from "@/lib/results-sync";
 import {
+  buildPackagesFor,
   createInitialState,
   loadState,
+  migrateState,
   resetState,
   saveState,
   seedDemo,
   uid,
 } from "@/lib/store";
-import { buildPackages } from "@/lib/packages";
 import {
   isSupabaseEnabled,
   loadRemote,
@@ -41,21 +42,13 @@ interface PoolContextValue {
   ready: boolean;
   sessionId: string | null;
   me: Participant | null;
-  // session
-  login: (name: string, pin: string) => Participant | null;
+  // session (organizer only)
   loginModerator: (pin: string) => boolean;
   logout: () => void;
-  // participant actions
-  join: (name: string, pin: string) => Participant;
-  choosePackage: (participantId: string, packageId: string) => void;
-  setPredictions: (
-    participantId: string,
-    preds: Partial<
-      Pick<Participant, "predChampionId" | "predTopScorer" | "predDarkHorseId">
-    >,
-  ) => void;
   // moderator actions
-  addParticipant: (name: string, pin: string) => Participant;
+  choosePackage: (participantId: string, packageId: string) => void;
+  setTeamOwner: (teamId: string, participantId: string | null) => void;
+  addParticipant: (name: string) => Participant;
   removeParticipant: (participantId: string) => void;
   setTeamResult: (
     teamId: string,
@@ -71,7 +64,6 @@ interface PoolContextValue {
   syncNow: () => Promise<boolean>;
   syncing: boolean;
   lastSync: number | null;
-  setActuals: (championId: string | null, topScorer: string | null) => void;
   updateSettings: (patch: Partial<PoolSettings>) => void;
   updateScoring: (patch: Partial<ScoringConfig>) => void;
   rebuildPackages: () => void;
@@ -104,7 +96,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     if (isSupabaseEnabled) {
       let unsub = () => {};
       loadRemote()
-        .then((remote) => {
+        .then((raw) => {
+          const remote = raw ? migrateState(raw) : null;
           if (remote) {
             lastJsonRef.current = JSON.stringify(remote);
             setStateRaw(remote);
@@ -166,20 +159,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     [state.participants, sessionId],
   );
 
-  // ── session ──
-  const login = useCallback(
-    (name: string, pin: string) => {
-      const found = state.participants.find(
-        (p) =>
-          p.name.trim().toLowerCase() === name.trim().toLowerCase() &&
-          p.pin === pin,
-      );
-      if (found) setSession(found.id);
-      return found ?? null;
-    },
-    [state.participants, setSession],
-  );
-
+  // ── session (organizer only) ──
   const loginModerator = useCallback(
     (pin: string) => {
       const mod = state.participants.find((p) => p.isModerator && p.pin === pin);
@@ -194,39 +174,20 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => setSession(null), [setSession]);
 
-  // ── participants ──
-  const createParticipant = useCallback(
-    (name: string, pin: string): Participant => ({
-      id: uid(),
-      name: name.trim(),
-      pin,
-      packageId: null,
-      isModerator: false,
-      joinedAt: Date.now(),
-      predChampionId: null,
-      predTopScorer: null,
-      predDarkHorseId: null,
-    }),
-    [],
-  );
-
-  const join = useCallback(
-    (name: string, pin: string) => {
-      const p = createParticipant(name, pin);
-      update((prev) => ({ ...prev, participants: [...prev.participants, p] }));
-      setSession(p.id);
-      return p;
-    },
-    [createParticipant, update, setSession],
-  );
-
+  // ── participants (managed by the organizer) ──
   const addParticipant = useCallback(
-    (name: string, pin: string) => {
-      const p = createParticipant(name, pin);
+    (name: string) => {
+      const p: Participant = {
+        id: uid(),
+        name: name.trim(),
+        packageId: null,
+        isModerator: false,
+        joinedAt: Date.now(),
+      };
       update((prev) => ({ ...prev, participants: [...prev.participants, p] }));
       return p;
     },
-    [createParticipant, update],
+    [update],
   );
 
   const removeParticipant = useCallback(
@@ -245,26 +206,6 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         participants: prev.participants.map((p) =>
           p.id === participantId ? { ...p, packageId } : p,
-        ),
-      }));
-    },
-    [update],
-  );
-
-  const setPredictions = useCallback(
-    (
-      participantId: string,
-      preds: Partial<
-        Pick<
-          Participant,
-          "predChampionId" | "predTopScorer" | "predDarkHorseId"
-        >
-      >,
-    ) => {
-      update((prev) => ({
-        ...prev,
-        participants: prev.participants.map((p) =>
-          p.id === participantId ? { ...p, ...preds } : p,
         ),
       }));
     },
@@ -349,17 +290,6 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applyAutoResults]);
 
-  const setActuals = useCallback(
-    (championId: string | null, topScorer: string | null) => {
-      update((prev) => ({
-        ...prev,
-        actualChampionId: championId,
-        actualTopScorer: topScorer,
-      }));
-    },
-    [update],
-  );
-
   const updateSettings = useCallback(
     (patch: Partial<PoolSettings>) => {
       update((prev) => ({ ...prev, settings: { ...prev.settings, ...patch } }));
@@ -377,9 +307,22 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   const rebuildPackages = useCallback(() => {
     update((prev) => ({
       ...prev,
-      packages: buildPackages(prev.settings.buyIns),
+      packages: buildPackagesFor(prev.settings),
     }));
   }, [update]);
+
+  // Individual mode: assign (or clear) the owner of a single team.
+  const setTeamOwner = useCallback(
+    (teamId: string, participantId: string | null) => {
+      update((prev) => {
+        const owners = { ...prev.teamOwners };
+        if (participantId) owners[teamId] = participantId;
+        else delete owners[teamId];
+        return { ...prev, teamOwners: owners };
+      });
+    },
+    [update],
+  );
 
   const loadDemo = useCallback(() => {
     const next = seedDemo();
@@ -397,12 +340,10 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     ready,
     sessionId,
     me,
-    login,
     loginModerator,
     logout,
-    join,
     choosePackage,
-    setPredictions,
+    setTeamOwner,
     addParticipant,
     removeParticipant,
     setTeamResult,
@@ -411,7 +352,6 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     syncNow,
     syncing,
     lastSync,
-    setActuals,
     updateSettings,
     updateScoring,
     rebuildPackages,
