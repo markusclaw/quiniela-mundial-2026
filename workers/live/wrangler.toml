@@ -1,0 +1,14 @@
+name = "quiniela-live"
+main = "worker.js"
+compatibility_date = "2024-12-30"
+# Same Cloudflare account as the Pages site (from the dashboard URL).
+# If `wrangler whoami` shows a different account, replace this id.
+account_id = "c60d73bd6bdd2bfa6aba42a117a4b69e"
+
+# Deploy:
+#   cd workers/live
+#   npx wrangler deploy
+#   npx wrangler secret put APISPORTS_KEY   (paste your API-Football key)
+#
+# Then copy the deployed URL (e.g. https://quiniela-live.<you>.workers.dev)
+# into the app's NEXT_PUBLIC_LIVE_API_URL env var (Cloudflare Pages + .env.local).
