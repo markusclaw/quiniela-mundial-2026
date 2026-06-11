@@ -173,13 +173,20 @@ export function computeStandings(state: PoolState): ParticipantStanding[] {
 
   const sorted = [...base].sort((a, b) => b.totalPoints - a.totalPoints);
   const champId = championOwnerId(state);
-  const pointsLeaderId =
-    sorted[0] && sorted[0].totalPoints > 0 ? sorted[0].participant.id : null;
+
+  // Everyone tied for the top total splits the points prize evenly.
+  const topPoints = sorted[0]?.totalPoints ?? 0;
+  const pointsLeaders =
+    topPoints > 0
+      ? sorted.filter((st) => st.totalPoints === topPoints).map((st) => st.participant.id)
+      : [];
 
   const shares: Record<string, number> = {};
   if (champId) shares[champId] = (shares[champId] ?? 0) + pot * s.payout.champion;
-  if (pointsLeaderId)
-    shares[pointsLeaderId] = (shares[pointsLeaderId] ?? 0) + pot * s.payout.points;
+  if (pointsLeaders.length) {
+    const each = (pot * s.payout.points) / pointsLeaders.length;
+    for (const id of pointsLeaders) shares[id] = (shares[id] ?? 0) + each;
+  }
 
   return sorted.map((st, i) => ({
     ...st,

@@ -1,4 +1,5 @@
 import type { Stage, TeamResult } from "@/lib/types";
+import { GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
 
 /**
  * ───────────────────────────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export function teamIdFromName(name: string): string | null {
   return toId(name);
 }
 
-interface RawMatch {
+export interface RawMatch {
   round?: string;
   group?: string;
   team1?: string;
@@ -108,7 +109,8 @@ interface RawMatch {
   ground?: string;
   score1?: number;
   score2?: number;
-  score?: { ft?: [number, number] };
+  // openfootball encodes extra time (`et`) and penalty shootouts (`p`).
+  score?: { ft?: [number, number]; et?: [number, number]; p?: [number, number] };
 }
 
 // Returns [home, away] goals if the match has been played, else null.
@@ -118,6 +120,22 @@ function getScore(m: RawMatch): [number, number] | null {
   const ft = m.score?.ft;
   if (Array.isArray(ft) && ft.length === 2) return [ft[0], ft[1]];
   return null;
+}
+
+// Decisive winner of a knockout match: penalties, then extra time, then the
+// regulation score. Returns the winning side's id, or null if we genuinely
+// can't tell (level with no shootout data) — we never guess.
+function decisiveWinner(
+  m: RawMatch,
+  id1: string,
+  id2: string,
+): string | null {
+  const pick = (pair?: [number, number]): string | null => {
+    if (!Array.isArray(pair) || pair.length !== 2 || pair[0] === pair[1])
+      return null;
+    return pair[0] > pair[1] ? id1 : id2;
+  };
+  return pick(m.score?.p) ?? pick(m.score?.et) ?? pick(getScore(m) ?? undefined);
 }
 
 // Knockout round label → ordered stage.
@@ -130,7 +148,8 @@ const ROUND_STAGE: { test: (r: string) => boolean; stage: Stage; rank: number }[
 ];
 
 function knockoutStage(round: string): { stage: Stage; rank: number } | null {
-  if (/third place/i.test(round)) return null; // 3rd-place game adds nothing
+  // 3rd-place game adds nothing (and must not be read as the "Final").
+  if (/3rd place|third place/i.test(round)) return null;
   return ROUND_STAGE.find((r) => r.test(round)) ?? null;
 }
 
@@ -155,6 +174,12 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
   let playedGroupMatches = 0;
   let knockoutResolved = false;
   const stageRank: Record<string, number> = {};
+  const goals: Record<string, { gf: number; ga: number }> = {};
+  const addGoals = (id: string, gf: number, ga: number) => {
+    const g = (goals[id] ??= { gf: 0, ga: 0 });
+    g.gf += gf;
+    g.ga += ga;
+  };
   let championId: string | null = null;
 
   for (const m of matches) {
@@ -169,6 +194,8 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       const [a, b] = score;
       const t1 = ensure(id1);
       const t2 = ensure(id2);
+      addGoals(id1, a, b);
+      addGoals(id2, b, a);
       if (a > b) {
         t1.groupWins++;
         t2.groupLosses++;
@@ -196,16 +223,55 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
         ensure(id).stageReached = ks.stage;
       }
     }
-    // Champion = winner of the Final.
-    if (ks.stage === "final" && score && id1 && id2) {
-      championId = score[0] >= score[1] ? id1 : id2;
+    // Champion = winner of the Final (penalties / extra time aware).
+    if (ks.stage === "final" && id1 && id2) {
+      const winner = decisiveWinner(m, id1, id2);
+      if (winner) championId = winner;
     }
+  }
+
+  // Group-stage advancement derived straight from the group table, so standings
+  // don't freeze waiting for the knockout bracket names to be published. For
+  // each completed group (every team has played 3): the top 2 reach the Round
+  // of 32; the 4th can never advance, so it's eliminated. The 3rd is left
+  // pending — best-thirds are confirmed once the real bracket resolves. This is
+  // only a gap-filler: authoritative knockout names above already ran and win
+  // ties, and computeResults recomputes from scratch each sync, so nothing is
+  // ever wrongly locked in.
+  for (const g of GROUP_IDS) {
+    const ids = teamsByGroup(g).map((t) => t.id);
+    const rows = ids.map((id) => out[id]).filter(Boolean) as TeamResult[];
+    const allPlayed =
+      rows.length === ids.length &&
+      rows.every((t) => t.groupWins + t.groupDraws + t.groupLosses >= 3);
+    if (!allPlayed) continue;
+    const ranked = [...rows].sort((a, b) => {
+      const pa = a.groupWins * 3 + a.groupDraws;
+      const pb = b.groupWins * 3 + b.groupDraws;
+      if (pb !== pa) return pb - pa;
+      const ga = goals[a.teamId] ?? { gf: 0, ga: 0 };
+      const gb = goals[b.teamId] ?? { gf: 0, ga: 0 };
+      const da = ga.gf - ga.ga;
+      const db = gb.gf - gb.ga;
+      if (db !== da) return db - da;
+      return gb.gf - ga.gf;
+    });
+    ranked.forEach((t, i) => {
+      if (i < 2) {
+        if ((stageRank[t.teamId] ?? 0) < 1) {
+          stageRank[t.teamId] = 1;
+          t.stageReached = "r32";
+        }
+      } else if (i === 3 && t.stageReached === "group") {
+        t.stageReached = "eliminated";
+      }
+    });
   }
 
   if (championId) ensure(championId).stageReached = "champion";
 
-  // Mark group-stage drop-outs as eliminated, but only once the knockout
-  // bracket has real names (so we don't prematurely eliminate advancers).
+  // Mark remaining group-stage drop-outs as eliminated once the knockout
+  // bracket has real names (catches the non-qualifying 3rd-place teams).
   if (knockoutResolved) {
     for (const t of Object.values(out)) {
       const played = t.groupWins + t.groupDraws + t.groupLosses;

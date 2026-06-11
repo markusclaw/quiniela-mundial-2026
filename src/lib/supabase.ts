@@ -45,19 +45,108 @@ export async function loadRemote(): Promise<PoolState | null> {
   return (data?.data as PoolState) ?? null;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-export function saveRemote(state: PoolState) {
+// ── Conflict-safe writes ─────────────────────────────────────────────────────
+// Every change is expressed as a pure mutation `(prev) => next` and applied to
+// the FRESHEST document on the server, never to a possibly-stale in-memory blob.
+// We then write with an optimistic-concurrency guard (only if the row hasn't
+// changed since we read it) and retry on conflict. This prevents a stale tab —
+// or the periodic auto-sync — from silently clobbering edits made elsewhere
+// (e.g. dropping participants added on another device).
+
+type Mutation = (prev: PoolState) => PoolState;
+
+let queue: Mutation[] = [];
+let fallbackState: PoolState | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushing = false;
+let onSavedCb: ((saved: PoolState) => void) | null = null;
+
+/** Register a callback that fires with the authoritative saved state. */
+export function onRemoteSaved(cb: (saved: PoolState) => void) {
+  onSavedCb = cb;
+}
+
+/**
+ * Queue a change. `mutate` is applied server-side to the latest document;
+ * `fallback` is the optimistic local result, used only if no row exists yet.
+ */
+export function saveRemoteMutation(mutate: Mutation, fallback: PoolState) {
+  if (!db()) return;
+  queue.push(mutate);
+  fallbackState = fallback;
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => void flush(), 350);
+}
+
+async function flush(): Promise<void> {
   const sb = db();
   if (!sb) return;
-  // debounce rapid edits into one write
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    sb.from(TABLE)
-      .upsert({ id: POOL_ID, data: state, updated_at: new Date().toISOString() })
-      .then(({ error }) => {
-        if (error) console.warn("[supabase] save failed:", error.message);
-      });
-  }, 400);
+  if (flushing) {
+    // A flush is already running; re-arm so queued changes aren't lost.
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => void flush(), 150);
+    return;
+  }
+  if (!queue.length) return;
+  flushing = true;
+  const pending = queue;
+  queue = [];
+  const fallback = fallbackState;
+
+  try {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const { data: row, error: readErr } = await sb
+        .from(TABLE)
+        .select("data, updated_at")
+        .eq("id", POOL_ID)
+        .maybeSingle();
+      if (readErr) {
+        console.warn("[supabase] read-before-write failed:", readErr.message);
+        break;
+      }
+
+      const base = (row?.data as PoolState | undefined) ?? fallback;
+      if (!base) break; // nothing to write yet
+      const next = pending.reduce<PoolState>((acc, fn) => fn(acc), base);
+      const newTs = new Date().toISOString();
+
+      if (!row) {
+        // No row yet → create it. If someone else created it first, retry.
+        const { error } = await sb
+          .from(TABLE)
+          .insert({ id: POOL_ID, data: next, updated_at: newTs });
+        if (!error) {
+          onSavedCb?.(next);
+          return;
+        }
+        continue;
+      }
+
+      // Optimistic-concurrency update: only succeeds if the row hasn't changed
+      // since we read it. Empty result = someone wrote in between → re-read.
+      const { data: updated, error } = await sb
+        .from(TABLE)
+        .update({ data: next, updated_at: newTs })
+        .eq("id", POOL_ID)
+        .eq("updated_at", row.updated_at)
+        .select("data");
+      if (error) {
+        console.warn("[supabase] save failed:", error.message);
+        break;
+      }
+      if (updated && updated.length > 0) {
+        onSavedCb?.(next);
+        return;
+      }
+      // Conflict — loop and re-apply onto the newer document.
+    }
+  } finally {
+    flushing = false;
+    if (queue.length) {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = setTimeout(() => void flush(), 50);
+    }
+  }
 }
 
 /** Subscribe to remote changes from other devices. Returns an unsubscribe fn. */

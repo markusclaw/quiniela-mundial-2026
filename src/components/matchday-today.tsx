@@ -71,7 +71,9 @@ export function MatchdayToday() {
   useEffect(() => {
     if (!isLiveEnabled) return;
     let on = true;
-    const load = () => fetchLive().then((l) => on && setLive(l));
+    // Only adopt a successful fetch; a null (transient failure / rate-limit)
+    // keeps the last good data so scores don't flicker in and out.
+    const load = () => fetchLive().then((l) => on && l && setLive(l));
     load();
     const id = setInterval(load, LIVE_MS);
     return () => {
@@ -92,17 +94,39 @@ export function MatchdayToday() {
     return { list: future.filter((f) => f.date === nextDate), isToday: false };
   }, [fixtures]);
 
-  // Pick the headline "main event" of the window.
+  // Pick the headline "main event": a live match wins; otherwise the next
+  // upcoming kickoff steps up; only if everything is done do we headline a
+  // finished match. So once a game ends, the hero advances to the next one.
   const featured = useMemo(() => {
     if (!list.length) return null;
-    const score = (f: FixtureLite) => {
+    const now = Date.now();
+    const prominence = (f: FixtureLite) => {
       const rank = getTeam(f.home.id ?? "")?.fifaRank ?? 999;
       const rank2 = getTeam(f.away.id ?? "")?.fifaRank ?? 999;
       const best = Math.min(rank, rank2);
       return ROUND_RANK(f) * 1000 + (200 - Math.min(best, 200));
     };
-    return [...list].sort((a, b) => score(b) - score(a))[0];
-  }, [list]);
+    const phaseOf = (f: FixtureLite): "live" | "upcoming" | "done" => {
+      const lm = findLiveFor(live, f.home.id, f.away.id);
+      if (lm?.inPlay) return "live";
+      if (lm?.finished || f.played || f.score) return "done";
+      if (f.kickoff != null && f.kickoff <= now) {
+        const since = now - f.kickoff;
+        const win = (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
+        return since <= win ? "live" : "done";
+      }
+      return "upcoming";
+    };
+    const live_ = list.filter((f) => phaseOf(f) === "live");
+    if (live_.length)
+      return [...live_].sort((a, b) => prominence(b) - prominence(a))[0];
+    const upcoming = list.filter((f) => phaseOf(f) === "upcoming");
+    if (upcoming.length)
+      return [...upcoming].sort(
+        (a, b) => (a.kickoff ?? Infinity) - (b.kickoff ?? Infinity),
+      )[0];
+    return [...list].sort((a, b) => prominence(b) - prominence(a))[0];
+  }, [list, live]);
 
   if (loading) {
     return (
@@ -219,8 +243,9 @@ function FeaturedMatch({
     !showLive && !showFinal && diff != null && diff > 0 && diff <= 3600 * 1000; // ≤ 1h out
   // A real match lasts ~2h (90' + half-time + stoppage). Only treat it as
   // "in progress" inside that window — otherwise it's finished and we're just
-  // waiting on a score source to publish the final.
-  const MATCH_WINDOW = 2.5 * 3600 * 1000;
+  // waiting on a score source to publish the final. Knockouts can run to extra
+  // time + penalties, so give them a wider window.
+  const MATCH_WINDOW = (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
   const sinceKickoff = diff != null ? -diff : null; // ms since kickoff
   const liveNow =
     !showLive &&
@@ -293,14 +318,11 @@ function FeaturedMatch({
                 {t("today.live")}
               </div>
             ) : pending ? (
-              <>
-                <div className="text-4xl font-extrabold tracking-tight text-white/60 sm:text-6xl">
-                  –<span className="px-1 text-white/30">·</span>–
-                </div>
-                <div className="mt-1 text-center text-[11px] font-semibold uppercase tracking-wide text-white/70">
+              <div className="flex flex-col items-center gap-1.5 py-2">
+                <span className="rounded-full bg-white/15 px-3 py-1 text-center text-[11px] font-semibold leading-tight">
                   {t("today.pending")}
-                </div>
-              </>
+                </span>
+              </div>
             ) : (
               <div className="text-3xl font-extrabold tracking-tight sm:text-5xl">
                 {time}

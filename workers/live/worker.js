@@ -35,6 +35,10 @@ export default {
       const fixture = url.searchParams.get("fixture");
       if (!fixture) return json({ error: "fixture required" }, 400);
       path = `/fixtures/statistics?fixture=${encodeURIComponent(fixture)}`;
+    } else if (url.searchParams.get("all")) {
+      // Every World Cup fixture this season (for standings/points). The app
+      // derives results from this so points update the instant a match ends.
+      path = `/fixtures?league=${LEAGUE}&season=${SEASON}`;
     } else if (url.searchParams.get("date")) {
       // Full day of World Cup fixtures: upcoming, in-play AND finished (with
       // final scores) — so the app shows finals the moment a match ends,

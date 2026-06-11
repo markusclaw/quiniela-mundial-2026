@@ -12,6 +12,8 @@ import {
   Copy,
   Sparkles,
   Printer,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import { AdminGate } from "@/components/require-auth";
 import { SetupWizard } from "@/components/setup-wizard";
@@ -25,6 +27,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatMoney } from "@/lib/utils";
+import { participantBuyIn } from "@/lib/scoring";
 import { GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
 import type { Stage } from "@/lib/types";
 
@@ -202,13 +205,32 @@ function ResultsPanel() {
 }
 
 function PeopleTab() {
-  const { state, addParticipant, removeParticipant, choosePackage, setTeamOwner } =
-    usePool();
+  const {
+    state,
+    addParticipant,
+    removeParticipant,
+    setParticipantPaid,
+    choosePackage,
+    setTeamOwner,
+  } = usePool();
   const { t } = useT();
   const [name, setName] = useState("");
   const individual = state.settings.distributionMode === "individual";
   const ownedCount = (pid: string) =>
     Object.values(state.teamOwners ?? {}).filter((id) => id === pid).length;
+
+  // Payment tracking: each player owes their buy-in; the organizer marks paid.
+  const cur = state.settings.currency;
+  const players = state.participants.filter((p) => !p.isModerator);
+  const owedBy = (pid: string) => {
+    const p = state.participants.find((x) => x.id === pid);
+    return p ? participantBuyIn(p, state) : 0;
+  };
+  const collected = players
+    .filter((p) => p.paid)
+    .reduce((sum, p) => sum + owedBy(p.id), 0);
+  const expected = players.reduce((sum, p) => sum + owedBy(p.id), 0);
+  const outstanding = expected - collected;
 
   const ownerByPkg: Record<string, string> = {};
   for (const p of state.participants)
@@ -257,7 +279,9 @@ function PeopleTab() {
               <div className="w-32 shrink-0">
                 <div className="flex items-center gap-1.5 font-medium">
                   {p.name}
-                  {p.isModerator && <Badge variant="muted">org</Badge>}
+                  {p.isModerator && (
+                    <Badge variant="muted">{t("lb.organizer")}</Badge>
+                  )}
                 </div>
               </div>
               {individual ? (
@@ -283,17 +307,69 @@ function PeopleTab() {
                 </Select>
               )}
               {!p.isModerator && (
+                <button
+                  type="button"
+                  onClick={() => setParticipantPaid(p.id, !p.paid)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+                    p.paid
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:bg-secondary",
+                  )}
+                  aria-pressed={!!p.paid}
+                >
+                  {p.paid ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Circle className="h-3.5 w-3.5" />
+                  )}
+                  {p.paid ? t("admin.pay.paid") : t("admin.pay.owes")}
+                  <span className="tabular-nums">
+                    {formatMoney(owedBy(p.id), cur)}
+                  </span>
+                </button>
+              )}
+              {!p.isModerator && (
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => removeParticipant(p.id)}
-                  aria-label="Remove"
+                  aria-label={t("common.remove")}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               )}
             </div>
           ))}
+
+          {players.length > 0 && (
+            <div className="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-secondary/50 p-3 text-center">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {t("admin.pay.collected")}
+                </div>
+                <div className="font-bold tabular-nums text-primary">
+                  {formatMoney(collected, cur)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {t("admin.pay.outstanding")}
+                </div>
+                <div className="font-bold tabular-nums">
+                  {formatMoney(outstanding, cur)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {t("admin.pay.expected")}
+                </div>
+                <div className="font-bold tabular-nums">
+                  {formatMoney(expected, cur)}
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

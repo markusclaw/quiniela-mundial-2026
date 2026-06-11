@@ -30,7 +30,9 @@ const EN: Dict = {
   "common.change": "Change",
   "common.edit": "Edit",
   "common.save": "Save",
+  "common.remove": "Remove",
   "common.pot": "Pot {n}",
+  "chip.grp": "Grp {g}",
 
   // auto-sync
   "sync.live": "Live",
@@ -226,6 +228,11 @@ const EN: Dict = {
   "mode.individual.desc": "Assign teams one by one; each team is the same price.",
   "admin.people.teamsCount": "teams",
   "admin.people.unassigned": "— unassigned —",
+  "admin.pay.paid": "Paid",
+  "admin.pay.owes": "Owes",
+  "admin.pay.collected": "Collected",
+  "admin.pay.outstanding": "Outstanding",
+  "admin.pay.expected": "Total due",
   "admin.assign.title": "Assign teams",
   "admin.assign.note":
     "Set who owns each team. All 48 can be handed out (e.g. 4 each).",
@@ -303,7 +310,9 @@ const ES: Dict = {
   "common.change": "Cambiar",
   "common.edit": "Editar",
   "common.save": "Guardar",
+  "common.remove": "Quitar",
   "common.pot": "Bombo {n}",
+  "chip.grp": "Gpo {g}",
 
   "sync.live": "En vivo",
   "sync.syncing": "Actualizando…",
@@ -492,6 +501,11 @@ const ES: Dict = {
   "mode.individual.desc": "Asigna equipos uno por uno; todos cuestan lo mismo.",
   "admin.people.teamsCount": "equipos",
   "admin.people.unassigned": "— sin asignar —",
+  "admin.pay.paid": "Pagó",
+  "admin.pay.owes": "Debe",
+  "admin.pay.collected": "Cobrado",
+  "admin.pay.outstanding": "Por cobrar",
+  "admin.pay.expected": "Total a cobrar",
   "admin.assign.title": "Asignar equipos",
   "admin.assign.note":
     "Define quién posee cada equipo. Los 48 pueden repartirse (ej. 4 c/u).",

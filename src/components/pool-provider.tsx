@@ -30,6 +30,7 @@ export interface SetupConfig {
   playerNames: string[];
 }
 import { fetchResults } from "@/lib/results-sync";
+import { fetchSeasonResults } from "@/lib/live";
 import {
   buildPackagesFor,
   createInitialState,
@@ -43,7 +44,8 @@ import {
 import {
   isSupabaseEnabled,
   loadRemote,
-  saveRemote,
+  onRemoteSaved,
+  saveRemoteMutation,
   subscribeRemote,
 } from "@/lib/supabase";
 
@@ -62,6 +64,7 @@ interface PoolContextValue {
   setTeamOwner: (teamId: string, participantId: string | null) => void;
   addParticipant: (name: string) => Participant;
   removeParticipant: (participantId: string) => void;
+  setParticipantPaid: (participantId: string, paid: boolean) => void;
   setTeamResult: (
     teamId: string,
     patch: Partial<{
@@ -96,24 +99,23 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   // Tracks the last JSON we wrote/received so realtime echoes don't loop.
   const lastJsonRef = useRef<string>("");
 
-  // Persist a state snapshot to the active backend (Supabase or localStorage).
-  const persist = useCallback((next: PoolState) => {
-    lastJsonRef.current = JSON.stringify(next);
-    if (isSupabaseEnabled) saveRemote(next);
-    else saveState(next);
-  }, []);
-
   useEffect(() => {
     setSessionId(window.localStorage.getItem(SESSION_KEY));
 
     if (isSupabaseEnabled) {
+      // Whenever a write lands on the server, adopt the authoritative result
+      // (which may include changes merged in from other devices).
+      onRemoteSaved((saved) => {
+        lastJsonRef.current = JSON.stringify(saved);
+        setStateRaw(saved);
+      });
       // Attach the realtime listener synchronously so cleanup always tears it
       // down (React dev mounts effects twice).
       const unsub = subscribeRemote((incoming) => {
         const json = JSON.stringify(incoming);
         if (json === lastJsonRef.current) return; // ignore our own echo
         lastJsonRef.current = json;
-        setStateRaw(incoming);
+        setStateRaw(migrateState(incoming));
       });
       loadRemote()
         .then((raw) => {
@@ -126,7 +128,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             const initial = createInitialState();
             lastJsonRef.current = JSON.stringify(initial);
             setStateRaw(initial);
-            saveRemote(initial);
+            saveRemoteMutation(() => initial, initial);
           }
         })
         .catch(() => setStateRaw(loadState()))
@@ -139,24 +141,32 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, []);
 
-  const commit = useCallback(
-    (next: PoolState) => {
-      setStateRaw(next);
-      persist(next);
-    },
-    [persist],
-  );
+  // Apply a change locally (optimistic) and durably. With Supabase, the change
+  // is replayed against the freshest server document so concurrent edits never
+  // clobber each other; the authoritative result comes back via onRemoteSaved.
+  const update = useCallback((fn: (prev: PoolState) => PoolState) => {
+    setStateRaw((prev) => {
+      const next = fn(prev);
+      if (isSupabaseEnabled) {
+        saveRemoteMutation(fn, next);
+      } else {
+        lastJsonRef.current = JSON.stringify(next);
+        saveState(next);
+      }
+      return next;
+    });
+  }, []);
 
-  const update = useCallback(
-    (fn: (prev: PoolState) => PoolState) => {
-      setStateRaw((prev) => {
-        const next = fn(prev);
-        persist(next);
-        return next;
-      });
-    },
-    [persist],
-  );
+  // Wholesale replace (wizard / reset / demo): a replace mutation ignores prev.
+  const commit = useCallback((next: PoolState) => {
+    setStateRaw(next);
+    if (isSupabaseEnabled) {
+      saveRemoteMutation(() => next, next);
+    } else {
+      lastJsonRef.current = JSON.stringify(next);
+      saveState(next);
+    }
+  }, []);
 
   const setSession = useCallback((id: string | null) => {
     setSessionId(id);
@@ -207,6 +217,18 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
       update((prev) => ({
         ...prev,
         participants: prev.participants.filter((p) => p.id !== participantId),
+      }));
+    },
+    [update],
+  );
+
+  const setParticipantPaid = useCallback(
+    (participantId: string, paid: boolean) => {
+      update((prev) => ({
+        ...prev,
+        participants: prev.participants.map((p) =>
+          p.id === participantId ? { ...p, paid } : p,
+        ),
       }));
     },
     [update],
@@ -290,7 +312,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   const syncNow = useCallback(async () => {
     setSyncing(true);
     try {
-      const data = await fetchResults();
+      // Prefer API-Football (authoritative + fast); fall back to the free feed.
+      const data = (await fetchSeasonResults()) ?? (await fetchResults());
       if (data) {
         applyAutoResults(data.results);
         setLastSync(Date.now());
@@ -394,6 +417,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     setTeamOwner,
     addParticipant,
     removeParticipant,
+    setParticipantPaid,
     setTeamResult,
     clearManual,
     applyAutoResults,

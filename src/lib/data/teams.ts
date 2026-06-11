@@ -26,7 +26,7 @@ export const TEAMS: Team[] = [
   { id: "USA", name: "United States", flag: "🇺🇸", pot: 1, group: "D", confederation: "CONCACAF", fifaRank: 14 },
   { id: "PAR", name: "Paraguay", flag: "🇵🇾", pot: 3, group: "D", confederation: "CONMEBOL", fifaRank: 39 },
   { id: "AUS", name: "Australia", flag: "🇦🇺", pot: 2, group: "D", confederation: "AFC", fifaRank: 26 },
-  { id: "TUR", name: "Turkey", flag: "🇹🇷", pot: 4, group: "D", confederation: "UEFA", fifaRank: 27 },
+  { id: "TUR", name: "Turkey", flag: "🇹🇷", pot: 4, group: "D", confederation: "UEFA", fifaRank: 25 },
 
   // Group E
   { id: "GER", name: "Germany", flag: "🇩🇪", pot: 1, group: "E", confederation: "UEFA", fifaRank: 12 },
@@ -37,7 +37,7 @@ export const TEAMS: Team[] = [
   // Group F
   { id: "NED", name: "Netherlands", flag: "🇳🇱", pot: 1, group: "F", confederation: "UEFA", fifaRank: 7 },
   { id: "JPN", name: "Japan", flag: "🇯🇵", pot: 2, group: "F", confederation: "AFC", fifaRank: 18 },
-  { id: "SWE", name: "Sweden", flag: "🇸🇪", pot: 4, group: "F", confederation: "UEFA", fifaRank: 41 },
+  { id: "SWE", name: "Sweden", flag: "🇸🇪", pot: 4, group: "F", confederation: "UEFA", fifaRank: 38 },
   { id: "TUN", name: "Tunisia", flag: "🇹🇳", pot: 3, group: "F", confederation: "CAF", fifaRank: 45 },
 
   // Group G
@@ -55,7 +55,7 @@ export const TEAMS: Team[] = [
   // Group I
   { id: "FRA", name: "France", flag: "🇫🇷", pot: 1, group: "I", confederation: "UEFA", fifaRank: 3 },
   { id: "SEN", name: "Senegal", flag: "🇸🇳", pot: 2, group: "I", confederation: "CAF", fifaRank: 19 },
-  { id: "IRQ", name: "Iraq", flag: "🇮🇶", pot: 4, group: "I", confederation: "AFC", fifaRank: 58 },
+  { id: "IRQ", name: "Iraq", flag: "🇮🇶", pot: 4, group: "I", confederation: "AFC", fifaRank: 57 },
   { id: "NOR", name: "Norway", flag: "🇳🇴", pot: 3, group: "I", confederation: "UEFA", fifaRank: 29 },
 
   // Group J
