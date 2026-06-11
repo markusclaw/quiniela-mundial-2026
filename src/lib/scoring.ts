@@ -17,14 +17,10 @@ export const DEFAULT_SCORING: ScoringConfig = {
   final: 34,
   champion: 55,
   underdogMultiplier: 1.5, // Pot 3 & 4 teams on knockout milestones
-  // Pot pools by phase — must sum to 1. Paid out as teams advance.
-  pool: {
-    group: 0.15,
-    r16: 0.12,
-    qf: 0.17,
-    sf: 0.16,
-    final: 0.12,
-    champion: 0.28,
+  // Two payouts (must sum to 1).
+  payout: {
+    champion: 0.6, // owner of the World Cup winner
+    points: 0.4, // participant with the most points overall
   },
 };
 
@@ -141,56 +137,26 @@ export function totalPot(state: PoolState): number {
   );
 }
 
-/**
- * Distributes each phase pool proportionally to the points each participant
- * earned in that phase (group, r16, qf, sf, final, champion).
- */
-function distributePot(
-  state: PoolState,
-  standings: Omit<ParticipantStanding, "potShare" | "rank">[],
-): Record<string, number> {
-  const pot = totalPot(state);
-  const s = state.scoring;
-  const share: Record<string, number> = {};
-  standings.forEach((st) => (share[st.participant.id] = 0));
-
-  const splitPool = (
-    fraction: number,
-    selector: (st: Omit<ParticipantStanding, "potShare" | "rank">) => number,
-  ) => {
-    const amount = pot * fraction;
-    const totals = standings.map(selector);
-    const sum = totals.reduce((a, b) => a + b, 0);
-    if (sum <= 0) return;
-    standings.forEach((st, i) => {
-      share[st.participant.id] += (totals[i] / sum) * amount;
-    });
-  };
-
-  // Group pool — by group points.
-  splitPool(s.pool.group, (st) =>
-    st.teamBreakdowns.reduce((a, b) => a + b.groupPoints, 0),
+/** The participant who owns the team that won the World Cup, if decided. */
+export function championOwnerId(state: PoolState): string | null {
+  const championTeamId = Object.values(state.results).find(
+    (r) => r.stageReached === "champion",
+  )?.teamId;
+  if (!championTeamId) return null;
+  const owner = state.participants.find((p) =>
+    ownedTeamIds(p, state).includes(championTeamId),
   );
-  // Each knockout pool — by number of owned teams that reached that depth.
-  const knockoutSelector =
-    (depth: Stage) =>
-    (st: Omit<ParticipantStanding, "potShare" | "rank">) =>
-      st.teamBreakdowns.reduce((a, b) => {
-        const r = state.results[b.teamId];
-        return a + (r && reachedAtLeast(r.stageReached, depth) ? 1 : 0);
-      }, 0);
-
-  splitPool(s.pool.r16, knockoutSelector("r16"));
-  splitPool(s.pool.qf, knockoutSelector("qf"));
-  splitPool(s.pool.sf, knockoutSelector("sf"));
-  splitPool(s.pool.final, knockoutSelector("final"));
-  splitPool(s.pool.champion, knockoutSelector("champion"));
-
-  return share;
+  return owner?.id ?? null;
 }
 
-/** Full leaderboard, sorted, with pot shares. */
+/**
+ * Two payouts: the champion's owner gets the champion share; the participant
+ * with the most points gets the points share. (One person can win both.)
+ */
 export function computeStandings(state: PoolState): ParticipantStanding[] {
+  const s = state.scoring;
+  const pot = totalPot(state);
+
   const base = state.participants.map((participant) => {
     const teamBreakdowns = ownedTeamIds(participant, state)
       .map((tid) => state.results[tid])
@@ -205,13 +171,19 @@ export function computeStandings(state: PoolState): ParticipantStanding[] {
     };
   });
 
-  const shares = distributePot(state, base);
+  const sorted = [...base].sort((a, b) => b.totalPoints - a.totalPoints);
+  const champId = championOwnerId(state);
+  const pointsLeaderId =
+    sorted[0] && sorted[0].totalPoints > 0 ? sorted[0].participant.id : null;
 
-  return base
-    .sort((a, b) => b.totalPoints - a.totalPoints)
-    .map((st, i) => ({
-      ...st,
-      potShare: Math.round(shares[st.participant.id] ?? 0),
-      rank: i + 1,
-    }));
+  const shares: Record<string, number> = {};
+  if (champId) shares[champId] = (shares[champId] ?? 0) + pot * s.payout.champion;
+  if (pointsLeaderId)
+    shares[pointsLeaderId] = (shares[pointsLeaderId] ?? 0) + pot * s.payout.points;
+
+  return sorted.map((st, i) => ({
+    ...st,
+    potShare: Math.round(shares[st.participant.id] ?? 0),
+    rank: i + 1,
+  }));
 }

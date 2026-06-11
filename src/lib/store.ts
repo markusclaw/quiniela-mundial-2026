@@ -103,6 +103,12 @@ export function migrateState(s: PoolState): PoolState {
   }
   delete settings.buyIns;
   if (!s.teamOwners) s.teamOwners = {};
+  // Migrate old phase-pool scoring to the two-payout model.
+  const scoring = s.scoring as ScoringConfig & { pool?: unknown };
+  if (scoring && !scoring.payout) {
+    scoring.payout = { champion: 0.6, points: 0.4 };
+  }
+  if (scoring) delete scoring.pool;
   // Always re-assert the organizer PIN so login works on any saved pool.
   const mod = s.participants?.find((p) => p.isModerator);
   if (mod) mod.pin = ORGANIZER_PIN;

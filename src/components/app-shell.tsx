@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   Settings,
   LogOut,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePool } from "@/components/pool-provider";
@@ -22,6 +23,7 @@ const NAV = [
   { href: "/leaderboard", key: "nav.table", icon: Trophy },
   { href: "/fixtures", key: "nav.fixtures", icon: CalendarDays },
   { href: "/draw", key: "nav.packs", icon: LayoutGrid },
+  { href: "/rules", key: "nav.rules", icon: BookOpen },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -57,31 +59,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 active={pathname === item.href}
               />
             ))}
-            <NavLink
-              href="/admin"
-              label={t("nav.admin")}
-              icon={Settings}
-              active={pathname === "/admin"}
-            />
           </nav>
 
           <div className="flex items-center gap-2">
             <SyncIndicator className="hidden sm:inline-flex" />
             <LangToggle />
             {me?.isModerator && (
-              <>
-                <span className="hidden text-sm text-muted-foreground sm:inline">
-                  {me.name}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={logout}
-                  aria-label={t("action.logout")}
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </>
+              <span className="hidden text-sm text-muted-foreground sm:inline">
+                {me.name}
+              </span>
+            )}
+            {/* Subtle organizer entry */}
+            <Link
+              href="/admin"
+              aria-label={t("nav.admin")}
+              title={t("nav.admin")}
+              className={cn(
+                "inline-grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+                pathname === "/admin" && "bg-secondary text-foreground",
+              )}
+            >
+              <Settings className="h-4 w-4" />
+            </Link>
+            {me?.isModerator && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={logout}
+                aria-label={t("action.logout")}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             )}
           </div>
         </div>
@@ -102,12 +110,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               active={pathname === item.href}
             />
           ))}
-          <BottomLink
-            href="/admin"
-            label={t("nav.admin")}
-            icon={Settings}
-            active={pathname === "/admin"}
-          />
         </div>
       </nav>
     </div>

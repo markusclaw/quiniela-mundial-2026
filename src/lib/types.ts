@@ -66,14 +66,11 @@ export interface ScoringConfig {
   final: number;
   champion: number;
   underdogMultiplier: number; // applied to knockout milestones for Pot 3/4 teams
-  // pot pool split (must sum to 1)
-  pool: {
-    group: number;
-    r16: number;
-    qf: number;
-    sf: number;
-    final: number;
+  // Two payouts (must sum to 1): the World Cup champion's owner, and the
+  // participant whose teams earned the most points overall.
+  payout: {
     champion: number;
+    points: number;
   };
 }
 

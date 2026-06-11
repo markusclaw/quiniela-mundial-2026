@@ -22,6 +22,7 @@ const EN: Dict = {
   "nav.table": "Table",
   "nav.fixtures": "Fixtures",
   "nav.packs": "Packs",
+  "nav.rules": "Rules",
   "nav.admin": "Admin",
   "action.logout": "Log out",
   "common.confirm": "Confirm",
@@ -253,6 +254,27 @@ const EN: Dict = {
   "print.help": "Print, cut along the dashed lines, fold, and drop into the cup.",
   "print.button": "Print",
   "print.back": "Back to Admin",
+  "rules.title": "How it works",
+  "rules.intro":
+    "Welcome to the pool! Everyone owns a few teams in the World Cup. As your teams win games and move through the tournament, you earn points. When it's all over, the money — the whole pot from everyone's buy-ins — is split between two winners.",
+  "rules.waysTitle": "Two ways to win",
+  "rules.champion.title": "1. Own the champion",
+  "rules.champion.body":
+    "Whoever owns the team that wins the World Cup takes the biggest prize — the champion's share of the pot. Get the winning team and you've hit the jackpot.",
+  "rules.points.title": "2. Most points",
+  "rules.points.body":
+    "Whoever's teams add up to the most points across the whole tournament wins the second prize. So even if you don't own the champion, a great mix of teams that keep winning and advancing can pay off big.",
+  "rules.how.title": "How points work",
+  "rules.how.body":
+    "It's simple: your teams earn points for winning games in the group stage, and earn more each round they advance — the deeper a team goes, the more it's worth. The more teams you own, the more chances you have to rack up points, so owning extra teams really pays off.",
+  "rules.table.title": "Points table (for the curious)",
+  "rules.pt.groupWin": "Group win",
+  "rules.pt.groupDraw": "Group draw",
+  "rules.pt.advance": "Reach Round of 32",
+  "rules.pt.underdog":
+    "Underdogs (Pot 3 & 4 teams) earn this much more in the knockouts — a bonus if a longshot of yours goes far.",
+  "rules.more.body":
+    "Bottom line: the champion's owner wins big, and the best overall team combination wins big too. Owning more teams gives you more shots at both.",
 };
 
 const ES: Dict = {
@@ -263,6 +285,7 @@ const ES: Dict = {
   "nav.table": "Tabla",
   "nav.fixtures": "Partidos",
   "nav.packs": "Paquetes",
+  "nav.rules": "Reglas",
   "nav.admin": "Admin",
   "action.logout": "Salir",
   "common.confirm": "Confirmar",
@@ -487,6 +510,27 @@ const ES: Dict = {
   "print.help": "Imprime, recorta por las líneas punteadas, dobla y echa a la bolsa.",
   "print.button": "Imprimir",
   "print.back": "Volver a Admin",
+  "rules.title": "Cómo funciona",
+  "rules.intro":
+    "¡Bienvenido a la quiniela! A cada quien le tocan unos cuantos equipos del Mundial. Cada vez que tus equipos ganan o pasan de ronda, vas juntando puntos. Cuando termina el torneo, todo el dinero de las entradas (el bote) se reparte entre dos ganadores.",
+  "rules.waysTitle": "Dos formas de ganar",
+  "rules.champion.title": "1. Tener al campeón",
+  "rules.champion.body":
+    "Quien tenga al equipo que gana el Mundial se lleva el premio más grande: la parte del campeón. Si te toca el equipo ganador, te sacaste la lotería.",
+  "rules.points.title": "2. Más puntos",
+  "rules.points.body":
+    "Quien junte más puntos entre todos sus equipos durante el torneo gana el segundo premio. Así que aunque no tengas al campeón, una buena combinación de equipos que sigan ganando y avanzando puede pagar muy bien.",
+  "rules.how.title": "Cómo se suman los puntos",
+  "rules.how.body":
+    "Es sencillo: tus equipos suman puntos por ganar partidos en la fase de grupos, y suman más por cada ronda que avanzan — entre más lejos llega un equipo, más vale. Entre más equipos tengas, más oportunidades de juntar puntos, así que tener equipos de más sí conviene.",
+  "rules.table.title": "Tabla de puntos (para los curiosos)",
+  "rules.pt.groupWin": "Victoria de grupo",
+  "rules.pt.groupDraw": "Empate de grupo",
+  "rules.pt.advance": "Llegar a dieciseisavos",
+  "rules.pt.underdog":
+    "Los tapados (equipos de Bombo 3 y 4) ganan esto de más en las eliminatorias — un bono si una sorpresa tuya llega lejos.",
+  "rules.more.body":
+    "En resumen: el dueño del campeón gana en grande, y la mejor combinación de equipos también. Tener más equipos te da más oportunidades en ambas.",
 };
 
 const DICTS: Record<Locale, Dict> = { en: EN, es: ES };
@@ -506,18 +550,13 @@ interface LocaleCtx {
 
 const Ctx = createContext<LocaleCtx | null>(null);
 
-function detectLocale(): Locale {
-  if (typeof navigator === "undefined") return "es";
-  const lang = (navigator.language || "").toLowerCase();
-  return lang.startsWith("en") ? "en" : "es";
-}
-
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("es");
 
   useEffect(() => {
+    // Spanish is the default for everyone; a manual EN switch is remembered.
     const stored = window.localStorage.getItem(STORE_KEY) as Locale | null;
-    setLocaleState(stored ?? detectLocale());
+    setLocaleState(stored ?? "es");
   }, []);
 
   const setLocale = (l: Locale) => {
