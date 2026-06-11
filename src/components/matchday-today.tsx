@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CalendarDays, MapPin, Radio, User, BarChart3 } from "lucide-react";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -45,6 +45,30 @@ function teamName(side: { id: string | null; name: string }): string {
   return side.id ? getTeam(side.id)?.name ?? side.name : side.name;
 }
 
+// Headline prominence: later rounds and higher-ranked teams rank higher.
+function prominence(f: FixtureLite): number {
+  const rank = getTeam(f.home.id ?? "")?.fifaRank ?? 999;
+  const rank2 = getTeam(f.away.id ?? "")?.fifaRank ?? 999;
+  const best = Math.min(rank, rank2);
+  return ROUND_RANK(f) * 1000 + (200 - Math.min(best, 200));
+}
+
+function phaseOf(
+  f: FixtureLite,
+  live: LiveMatch[],
+  now: number,
+): "live" | "upcoming" | "done" {
+  const lm = findLiveFor(live, f.home.id, f.away.id);
+  if (lm?.inPlay) return "live";
+  if (lm?.finished || f.played || f.score) return "done";
+  if (f.kickoff != null && f.kickoff <= now) {
+    const since = now - f.kickoff;
+    const win = (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
+    return since <= win ? "live" : "done";
+  }
+  return "upcoming";
+}
+
 export function MatchdayToday() {
   const { state } = usePool();
   const { t, locale } = useT();
@@ -84,49 +108,47 @@ export function MatchdayToday() {
 
   const owners = useMemo(() => ownerMap(state), [state]);
 
-  const { list, isToday } = useMemo(() => {
-    if (!fixtures) return { list: [] as FixtureLite[], isToday: false };
-    const today = new Date().toLocaleDateString("en-CA");
-    const todays = fixtures.filter((f) => f.date === today);
-    if (todays.length) return { list: todays, isToday: true };
-    const future = fixtures.filter((f) => f.date > today);
-    const nextDate = future[0]?.date;
-    return { list: future.filter((f) => f.date === nextDate), isToday: false };
-  }, [fixtures]);
-
-  // Pick the headline "main event": a live match wins; otherwise the next
-  // upcoming kickoff steps up; only if everything is done do we headline a
-  // finished match. So once a game ends, the hero advances to the next one.
-  const featured = useMemo(() => {
-    if (!list.length) return null;
+  // Build a forward-looking feed: a live match headlines; otherwise the next
+  // upcoming kickoff does. The "up next" list shows the matches that come
+  // AFTER the hero (across days), so a finished game never sits up top.
+  // Today's finished results get their own compact strip below.
+  const { hero, rest, results, heroToday } = useMemo(() => {
+    const empty = {
+      hero: null as FixtureLite | null,
+      rest: [] as FixtureLite[],
+      results: [] as FixtureLite[],
+      heroToday: false,
+    };
+    if (!fixtures || !fixtures.length) return empty;
     const now = Date.now();
-    const prominence = (f: FixtureLite) => {
-      const rank = getTeam(f.home.id ?? "")?.fifaRank ?? 999;
-      const rank2 = getTeam(f.away.id ?? "")?.fifaRank ?? 999;
-      const best = Math.min(rank, rank2);
-      return ROUND_RANK(f) * 1000 + (200 - Math.min(best, 200));
+    const today = new Date().toLocaleDateString("en-CA");
+    const byTime = (a: FixtureLite, b: FixtureLite) =>
+      (a.kickoff ?? Infinity) - (b.kickoff ?? Infinity);
+
+    const liveOnes = fixtures.filter((f) => phaseOf(f, live, now) === "live");
+    const upcoming = fixtures
+      .filter((f) => phaseOf(f, live, now) === "upcoming")
+      .sort(byTime);
+    const finishedToday = fixtures
+      .filter((f) => phaseOf(f, live, now) === "done" && f.date === today)
+      .sort((a, b) => (b.kickoff ?? 0) - (a.kickoff ?? 0));
+
+    let h: FixtureLite | null = null;
+    if (liveOnes.length)
+      h = [...liveOnes].sort((a, b) => prominence(b) - prominence(a))[0];
+    else if (upcoming.length) h = upcoming[0];
+    else h = finishedToday[0] ?? null;
+    if (!h) return empty;
+
+    const restLive = liveOnes.filter((f) => f !== h);
+    const restUpcoming = upcoming.filter((f) => f !== h);
+    return {
+      hero: h,
+      rest: [...restLive, ...restUpcoming].slice(0, 6),
+      results: finishedToday.filter((f) => f !== h),
+      heroToday: h.date === today,
     };
-    const phaseOf = (f: FixtureLite): "live" | "upcoming" | "done" => {
-      const lm = findLiveFor(live, f.home.id, f.away.id);
-      if (lm?.inPlay) return "live";
-      if (lm?.finished || f.played || f.score) return "done";
-      if (f.kickoff != null && f.kickoff <= now) {
-        const since = now - f.kickoff;
-        const win = (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
-        return since <= win ? "live" : "done";
-      }
-      return "upcoming";
-    };
-    const live_ = list.filter((f) => phaseOf(f) === "live");
-    if (live_.length)
-      return [...live_].sort((a, b) => prominence(b) - prominence(a))[0];
-    const upcoming = list.filter((f) => phaseOf(f) === "upcoming");
-    if (upcoming.length)
-      return [...upcoming].sort(
-        (a, b) => (a.kickoff ?? Infinity) - (b.kickoff ?? Infinity),
-      )[0];
-    return [...list].sort((a, b) => prominence(b) - prominence(a))[0];
-  }, [list, live]);
+  }, [fixtures, live]);
 
   if (loading) {
     return (
@@ -137,46 +159,84 @@ export function MatchdayToday() {
       </Card>
     );
   }
-  if (!fixtures || !featured) return null;
+  if (!fixtures || !hero) return null;
 
-  const rest = list.filter((f) => f !== featured);
-  const featuredLive = findLiveFor(live, featured.home.id, featured.away.id);
+  const heroLive = findLiveFor(live, hero.home.id, hero.away.id);
 
   return (
     <div className="space-y-4">
       <FeaturedMatch
-        fixture={featured}
-        isToday={isToday}
+        fixture={hero}
+        isToday={heroToday}
         owners={owners}
         loc={loc}
-        live={featuredLive}
+        live={heroLive}
       />
-      {featuredLive && featuredLive.fixtureId > 0 &&
-        (featuredLive.inPlay || featuredLive.finished) && (
-          <LiveStats match={featuredLive} />
+      {heroLive && heroLive.fixtureId > 0 &&
+        (heroLive.inPlay || heroLive.finished) && (
+          <LiveStats match={heroLive} />
         )}
       {rest.length > 0 && (
-        <Card className="overflow-hidden">
-          <div className="flex items-center gap-2 border-b bg-secondary/60 px-5 py-2.5">
-            <CalendarDays className="h-4 w-4 text-primary" />
-            <span className="text-sm font-bold">
-              {isToday ? t("today.title") : t("today.upNext")}
-            </span>
-          </div>
-          <CardContent className="divide-y p-0">
-            {rest.map((f, i) => (
-              <MatchRow
-                key={i}
-                f={f}
-                live={findLiveFor(live, f.home.id, f.away.id)}
-                owners={owners}
-                loc={loc}
-                t={t}
-              />
-            ))}
-          </CardContent>
-        </Card>
+        <MiniCardRow
+          title={t("today.upNext")}
+          icon={<CalendarDays className="h-4 w-4 text-primary" />}
+          matches={rest}
+          live={live}
+          owners={owners}
+          loc={loc}
+          t={t}
+        />
       )}
+      {results.length > 0 && (
+        <MiniCardRow
+          title={t("today.results")}
+          icon={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
+          matches={results}
+          live={live}
+          owners={owners}
+          loc={loc}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+function MiniCardRow({
+  title,
+  icon,
+  matches,
+  live,
+  owners,
+  loc,
+  t,
+}: {
+  title: string;
+  icon: ReactNode;
+  matches: FixtureLite[];
+  live: LiveMatch[];
+  owners: Record<string, string>;
+  loc: string;
+  t: (k: string, p?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 px-1">
+        {icon}
+        <span className="text-sm font-bold">{title}</span>
+      </div>
+      <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+        {matches.map((f, i) => (
+          <MatchMiniCard
+            key={i}
+            f={f}
+            live={findLiveFor(live, f.home.id, f.away.id)}
+            owners={owners}
+            loc={loc}
+            t={t}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -443,7 +503,8 @@ function TeamSide({
   );
 }
 
-function MatchRow({
+// Compact match card for the horizontal "up next" / "results" rows.
+function MatchMiniCard({
   f,
   live,
   owners,
@@ -462,9 +523,7 @@ function MatchRow({
           hour: "numeric",
           minute: "2-digit",
         })
-      : "";
-  const homeOwner = f.home.id ? owners[f.home.id] : undefined;
-  const awayOwner = f.away.id ? owners[f.away.id] : undefined;
+      : t("today.vs");
 
   // Score source priority: live API (in-play or final) → free results feed.
   const sameOrient = live ? live.homeId === f.home.id : true;
@@ -475,13 +534,47 @@ function MatchRow({
     ? [apiHome, apiAway]
     : f.score ?? null;
   const isLive = !!live && live.inPlay;
-  const isDone = (!!live && live.finished) || f.played;
+  const isDone = (!!live && live.finished) || f.played || !!f.score;
+
+  const side = (
+    s: { id: string | null; name: string },
+    goals: number | null,
+  ) => {
+    const owner = s.id ? owners[s.id] : undefined;
+    return (
+      <div className="flex items-center gap-2">
+        {s.id ? (
+          <TeamCrest teamId={s.id} size="sm" />
+        ) : (
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-muted text-xs">
+            ?
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold leading-tight">
+            {teamName(s)}
+          </span>
+          {owner && (
+            <span className="block truncate text-[10px] text-muted-foreground">
+              {owner}
+            </span>
+          )}
+        </span>
+        <span className="ml-auto text-base font-extrabold tabular-nums">
+          {goals != null ? goals : ""}
+        </span>
+      </div>
+    );
+  };
 
   return (
-    <div className="flex items-center gap-3 px-5 py-3">
-      <div className="w-14 shrink-0 text-center">
+    <div className="w-[200px] shrink-0 rounded-xl border bg-card p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {f.label}
+        </span>
         {isLive ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-primary">
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/70" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
@@ -489,43 +582,16 @@ function MatchRow({
             {live!.minute != null ? `${live!.minute}'` : t("today.live")}
           </span>
         ) : isDone ? (
-          <span className="text-[10px] font-bold uppercase text-muted-foreground">
+          <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
             {t("today.ft")}
           </span>
         ) : (
-          <span className="text-xs font-semibold text-muted-foreground">{time}</span>
+          <span className="text-[11px] font-bold text-foreground">{time}</span>
         )}
       </div>
-      <div className="flex flex-1 items-center justify-end gap-2 text-right">
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium">{teamName(f.home)}</span>
-          {homeOwner && (
-            <span className="block truncate text-[10px] text-muted-foreground">
-              {homeOwner}
-            </span>
-          )}
-        </span>
-        {f.home.id && <TeamCrest teamId={f.home.id} size="sm" />}
-      </div>
-      <div className="shrink-0 px-1 text-center">
-        {score ? (
-          <span className="font-mono text-sm font-bold tabular-nums">
-            {score[0]}-{score[1]}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">vs</span>
-        )}
-      </div>
-      <div className="flex flex-1 items-center gap-2">
-        {f.away.id && <TeamCrest teamId={f.away.id} size="sm" />}
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium">{teamName(f.away)}</span>
-          {awayOwner && (
-            <span className="block truncate text-[10px] text-muted-foreground">
-              {awayOwner}
-            </span>
-          )}
-        </span>
+      <div className="space-y-1.5">
+        {side(f.home, score ? score[0] : null)}
+        {side(f.away, score ? score[1] : null)}
       </div>
     </div>
   );

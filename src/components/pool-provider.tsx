@@ -65,6 +65,7 @@ interface PoolContextValue {
   addParticipant: (name: string) => Participant;
   removeParticipant: (participantId: string) => void;
   setParticipantPaid: (participantId: string, paid: boolean) => void;
+  setTeamPaid: (participantId: string, teamId: string, paid: boolean) => void;
   setTeamResult: (
     teamId: string,
     patch: Partial<{
@@ -229,6 +230,25 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
         participants: prev.participants.map((p) =>
           p.id === participantId ? { ...p, paid } : p,
         ),
+      }));
+    },
+    [update],
+  );
+
+  const setTeamPaid = useCallback(
+    (participantId: string, teamId: string, paid: boolean) => {
+      update((prev) => ({
+        ...prev,
+        participants: prev.participants.map((p) => {
+          if (p.id !== participantId) return p;
+          const current = p.paidTeams ?? [];
+          const next = paid
+            ? current.includes(teamId)
+              ? current
+              : [...current, teamId]
+            : current.filter((id) => id !== teamId);
+          return { ...p, paidTeams: next };
+        }),
       }));
     },
     [update],
@@ -418,6 +438,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     addParticipant,
     removeParticipant,
     setParticipantPaid,
+    setTeamPaid,
     setTeamResult,
     clearManual,
     applyAutoResults,

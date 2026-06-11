@@ -53,7 +53,8 @@ export interface Participant {
   packageId: string | null;
   isModerator: boolean;
   joinedAt: number;
-  paid?: boolean;        // organizer marks who has paid their buy-in
+  paid?: boolean;        // package modes: organizer marks the buy-in as paid
+  paidTeams?: string[];  // individual mode: team ids the player has paid for
 }
 
 export interface ScoringConfig {
