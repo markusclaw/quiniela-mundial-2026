@@ -107,7 +107,14 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     setSessionId(window.localStorage.getItem(SESSION_KEY));
 
     if (isSupabaseEnabled) {
-      let unsub = () => {};
+      // Attach the realtime listener synchronously so cleanup always tears it
+      // down (React dev mounts effects twice).
+      const unsub = subscribeRemote((incoming) => {
+        const json = JSON.stringify(incoming);
+        if (json === lastJsonRef.current) return; // ignore our own echo
+        lastJsonRef.current = json;
+        setStateRaw(incoming);
+      });
       loadRemote()
         .then((raw) => {
           const remote = raw ? migrateState(raw) : null;
@@ -123,15 +130,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(() => setStateRaw(loadState()))
-        .finally(() => {
-          setReady(true);
-          unsub = subscribeRemote((incoming) => {
-            const json = JSON.stringify(incoming);
-            if (json === lastJsonRef.current) return; // ignore our own echo
-            lastJsonRef.current = json;
-            setStateRaw(incoming);
-          });
-        });
+        .finally(() => setReady(true));
       return () => unsub();
     }
 

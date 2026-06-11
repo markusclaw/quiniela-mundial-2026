@@ -64,8 +64,11 @@ export function saveRemote(state: PoolState) {
 export function subscribeRemote(cb: (state: PoolState) => void): () => void {
   const sb = db();
   if (!sb) return () => {};
+  // Unique channel name per subscription so listeners are always attached to a
+  // fresh channel before subscribe() — avoids "add callbacks after subscribe"
+  // when React (dev) mounts the provider twice.
   const channel = sb
-    .channel(`pool:${POOL_ID}`)
+    .channel(`pool:${POOL_ID}:${Math.random().toString(36).slice(2)}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: TABLE, filter: `id=eq.${POOL_ID}` },

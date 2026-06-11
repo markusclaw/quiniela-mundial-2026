@@ -108,6 +108,23 @@ export function MatchdayToday() {
   );
 }
 
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return now;
+}
+
+function fmtCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 function FeaturedMatch({
   fixture: f,
   isToday,
@@ -125,6 +142,15 @@ function FeaturedMatch({
     month: "short",
     day: "numeric",
   });
+
+  // Tick every second only when we're near kickoff (or it just started).
+  const near =
+    !f.played && f.kickoff != null && f.kickoff - Date.now() < 2 * 3600 * 1000;
+  const now = useNow(near);
+  const diff = f.kickoff != null ? f.kickoff - now : null;
+  const counting = diff != null && diff > 0 && diff <= 3600 * 1000; // ≤ 1h out
+  const liveNow = diff != null && diff <= 0 && !f.played; // kicked off, no FT yet
+
   const time =
     f.kickoff != null
       ? new Date(f.kickoff).toLocaleTimeString(loc, {
@@ -156,12 +182,29 @@ function FeaturedMatch({
               <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
                 {f.score[0]}<span className="px-1 text-white/50">-</span>{f.score[1]}
               </div>
+            ) : counting ? (
+              <>
+                <div className="text-4xl font-extrabold tabular-nums tracking-tight sm:text-6xl">
+                  {fmtCountdown(diff!)}
+                </div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-white/70">
+                  {t("today.startsIn")}
+                </div>
+              </>
+            ) : liveNow ? (
+              <div className="flex items-center gap-2 text-2xl font-extrabold sm:text-4xl">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+                </span>
+                {t("today.live")}
+              </div>
             ) : (
               <div className="text-3xl font-extrabold tracking-tight sm:text-5xl">
                 {time}
               </div>
             )}
-            {!f.played && f.kickoff != null && (
+            {!f.played && !counting && !liveNow && f.kickoff != null && (
               <div className="mt-1 text-[11px] text-white/70">{dateLabel}</div>
             )}
           </div>

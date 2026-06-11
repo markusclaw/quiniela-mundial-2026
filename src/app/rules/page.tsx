@@ -82,28 +82,26 @@ function RulesInner() {
             {t("rules.how.body")}
           </p>
 
-          <details className="rounded-lg border bg-muted/30">
-            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-muted-foreground">
+          <div className="rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("rules.table.title")}
-            </summary>
-            <div className="px-3 pb-3">
-              {pointRows.map((r) => (
-                <div
-                  key={r.label}
-                  className="flex items-center justify-between border-b py-1.5 text-sm last:border-0"
-                >
-                  <span>{r.label}</span>
-                  <span className="font-mono font-bold tabular-nums">
-                    {r.value}
-                  </span>
-                </div>
-              ))}
-              <div className="flex items-center gap-2 pt-2 text-xs text-muted-foreground">
-                <Badge variant="gold">×{s.underdogMultiplier}</Badge>
-                {t("rules.pt.underdog")}
-              </div>
             </div>
-          </details>
+            {pointRows.map((r) => (
+              <div
+                key={r.label}
+                className="flex items-center justify-between border-b py-1.5 text-sm last:border-0"
+              >
+                <span>{r.label}</span>
+                <span className="font-mono font-bold tabular-nums">
+                  {r.value}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 pt-2 text-xs text-muted-foreground">
+              <Badge variant="gold">×{s.underdogMultiplier}</Badge>
+              {t("rules.pt.underdog")}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

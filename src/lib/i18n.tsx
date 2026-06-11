@@ -47,6 +47,7 @@ const EN: Dict = {
   "today.live": "Live",
   "today.ft": "FT",
   "today.vs": "VS",
+  "today.startsIn": "Starts in",
   "today.yourTeam": "Your team",
   "today.noOwner": "Unassigned",
   "home.pot": "Pot",
@@ -267,7 +268,7 @@ const EN: Dict = {
   "rules.how.title": "How points work",
   "rules.how.body":
     "It's simple: your teams earn points for winning games in the group stage, and earn more each round they advance — the deeper a team goes, the more it's worth. The more teams you own, the more chances you have to rack up points, so owning extra teams really pays off.",
-  "rules.table.title": "Points table (for the curious)",
+  "rules.table.title": "Points per result",
   "rules.pt.groupWin": "Group win",
   "rules.pt.groupDraw": "Group draw",
   "rules.pt.advance": "Reach Round of 32",
@@ -309,6 +310,7 @@ const ES: Dict = {
   "today.live": "En vivo",
   "today.ft": "Final",
   "today.vs": "VS",
+  "today.startsIn": "Empieza en",
   "today.yourTeam": "Tu equipo",
   "today.noOwner": "Sin asignar",
   "home.pot": "Bote",
@@ -523,7 +525,7 @@ const ES: Dict = {
   "rules.how.title": "Cómo se suman los puntos",
   "rules.how.body":
     "Es sencillo: tus equipos suman puntos por ganar partidos en la fase de grupos, y suman más por cada ronda que avanzan — entre más lejos llega un equipo, más vale. Entre más equipos tengas, más oportunidades de juntar puntos, así que tener equipos de más sí conviene.",
-  "rules.table.title": "Tabla de puntos (para los curiosos)",
+  "rules.table.title": "Puntos por resultado",
   "rules.pt.groupWin": "Victoria de grupo",
   "rules.pt.groupDraw": "Empate de grupo",
   "rules.pt.advance": "Llegar a dieciseisavos",
