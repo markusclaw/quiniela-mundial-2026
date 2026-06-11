@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import type {
+  DistributionMode,
   Participant,
   PoolSettings,
   PoolState,
@@ -17,6 +18,17 @@ import type {
   Stage,
   TeamResult,
 } from "@/lib/types";
+
+export interface SetupConfig {
+  name: string;
+  currency: string;
+  joinCode: string;
+  distributionMode: DistributionMode;
+  buyIn: number;
+  teamPrice: number;
+  tierBuyIns: { premium: number; mid: number; value: number };
+  playerNames: string[];
+}
 import { fetchResults } from "@/lib/results-sync";
 import {
   buildPackagesFor,
@@ -67,6 +79,7 @@ interface PoolContextValue {
   updateSettings: (patch: Partial<PoolSettings>) => void;
   updateScoring: (patch: Partial<ScoringConfig>) => void;
   rebuildPackages: () => void;
+  applySetup: (cfg: SetupConfig) => void;
   loadDemo: () => void;
   reset: () => void;
 }
@@ -335,6 +348,42 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }, [commit, setSession]);
 
+  // Wizard finish: build a fresh, fully-configured pool in one atomic commit
+  // (keeps the organizer logged in).
+  const applySetup = useCallback(
+    (cfg: SetupConfig) => {
+      const base = createInitialState();
+      base.settings = {
+        ...base.settings,
+        name: cfg.name.trim() || base.settings.name,
+        currency: cfg.currency,
+        joinCode: cfg.joinCode.trim().toUpperCase() || base.settings.joinCode,
+        distributionMode: cfg.distributionMode,
+        buyIn: cfg.buyIn,
+        teamPrice: cfg.teamPrice,
+        tierBuyIns: cfg.tierBuyIns,
+      };
+      base.packages = buildPackagesFor(base.settings);
+      base.participants = [
+        base.participants[0],
+        ...cfg.playerNames
+          .map((n) => n.trim())
+          .filter(Boolean)
+          .map((name) => ({
+            id: uid(),
+            name,
+            packageId: null,
+            isModerator: false,
+            joinedAt: Date.now(),
+          })),
+      ];
+      base.teamOwners = {};
+      commit(base);
+      setSession("mod");
+    },
+    [commit, setSession],
+  );
+
   const value: PoolContextValue = {
     state,
     ready,
@@ -355,6 +404,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     updateSettings,
     updateScoring,
     rebuildPackages,
+    applySetup,
     loadDemo,
     reset,
   };

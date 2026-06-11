@@ -9,8 +9,10 @@ import {
   RefreshCw,
   Plus,
   Copy,
+  Sparkles,
 } from "lucide-react";
 import { AdminGate } from "@/components/require-auth";
+import { SetupWizard } from "@/components/setup-wizard";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamChip } from "@/components/team-chip";
@@ -35,20 +37,31 @@ const STAGE_KEYS: { value: Stage; key: string }[] = [
   { value: "champion", key: "stage.champion" },
 ];
 
-type Tab = "settings" | "people" | "results";
+type Tab = "settings" | "people";
 
 function AdminInner() {
   const { t } = useT();
-  const [tab, setTab] = useState<Tab>("results");
+  const { state } = usePool();
+  const fresh =
+    state.participants.filter((p) => !p.isModerator).length === 0 &&
+    Object.keys(state.teamOwners ?? {}).length === 0;
+  const [setup, setSetup] = useState(fresh);
+  const [tab, setTab] = useState<Tab>("people");
   const tabs: { id: Tab; key: string; icon: React.ElementType }[] = [
-    { id: "results", key: "admin.tab.results", icon: ClipboardList },
     { id: "people", key: "admin.tab.people", icon: Users },
     { id: "settings", key: "admin.tab.settings", icon: Settings },
   ];
 
+  if (setup) return <SetupWizard onClose={() => setSetup(false)} />;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">{t("admin.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold tracking-tight">{t("admin.title")}</h1>
+        <Button variant="outline" size="sm" onClick={() => setSetup(true)}>
+          <Sparkles className="h-4 w-4" /> {t("wizard.heading")}
+        </Button>
+      </div>
 
       <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1 no-scrollbar">
         {tabs.map((tb) => (
@@ -68,14 +81,13 @@ function AdminInner() {
         ))}
       </div>
 
-      {tab === "results" && <ResultsTab />}
       {tab === "people" && <PeopleTab />}
       {tab === "settings" && <SettingsTab />}
     </div>
   );
 }
 
-function ResultsTab() {
+function ResultsPanel() {
   const { state, setTeamResult, clearManual, syncNow, syncing } = usePool();
   const { t } = useT();
   return (
@@ -94,6 +106,12 @@ function ResultsTab() {
           </Button>
         </CardContent>
       </Card>
+
+      <details className="rounded-xl border bg-card">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-muted-foreground">
+          {t("admin.results.overrideTitle")}
+        </summary>
+        <div className="space-y-4 p-4 pt-0">
       {GROUP_IDS.map((g) => (
         <Card key={g}>
           <CardHeader className="pb-2">
@@ -167,6 +185,8 @@ function ResultsTab() {
           </CardContent>
         </Card>
       ))}
+        </div>
+      </details>
     </div>
   );
 }
@@ -463,24 +483,31 @@ function SettingsTab() {
         </CardContent>
       </Card>
 
+      <ResultsPanel />
+
       <Card className="border-destructive/30">
         <CardHeader className="pb-2">
           <CardTitle className="text-base text-destructive">
             {t("admin.settings.danger")}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={loadDemo}>
-            {t("admin.settings.loadDemo")}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (confirm(t("admin.settings.resetConfirm"))) reset();
-            }}
-          >
-            <Trash2 className="h-4 w-4" /> {t("admin.settings.reset")}
-          </Button>
+        <CardContent className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            {t("admin.settings.resetNote")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={loadDemo}>
+              {t("admin.settings.loadDemo")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirm(t("admin.settings.resetConfirm"))) reset();
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> {t("admin.settings.reset")}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

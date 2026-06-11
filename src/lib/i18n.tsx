@@ -219,14 +219,36 @@ const EN: Dict = {
   "admin.assign.note":
     "Set who owns each team. All 48 can be handed out (e.g. 4 each).",
   "draw.individualNote": "Individual teams — {price} each. Assigned by the organizer.",
+  "draw.individualTitle": "Team packs",
+  "draw.personPack": "{name}'s pack",
+  "draw.inTheCup": "Still in the cup ({n})",
+  "draw.noneAssigned": "No teams assigned yet.",
   "admin.settings.apply": "Apply prices to packages",
   "admin.settings.applyNote":
     "Rebuilds the 12 packages with the current prices. Do this before people start choosing.",
-  "admin.settings.danger": "Danger zone",
+  "admin.settings.danger": "Start a new quiniela",
+  "admin.settings.resetNote":
+    "Starting over wipes all players, assignments and results back to a clean pool — then pick your mode and add players.",
   "admin.settings.loadDemo": "Load demo pool",
-  "admin.settings.reset": "Reset pool",
+  "admin.settings.reset": "Delete & start over",
   "admin.settings.resetConfirm":
-    "Reset everything? This clears all players and results.",
+    "Delete everything and start a new quiniela? This clears all players, assignments and results.",
+  "admin.results.overrideTitle": "Manual override (rarely needed)",
+  "wizard.heading": "Set up your quiniela",
+  "wizard.step": "Step {n} of {total}",
+  "wizard.s1": "Basics",
+  "wizard.s2": "Distribution",
+  "wizard.s3": "Pricing",
+  "wizard.s4": "Players",
+  "wizard.s5": "Review",
+  "wizard.next": "Next",
+  "wizard.back": "Back",
+  "wizard.finish": "Create quiniela",
+  "wizard.cancel": "Skip to panel",
+  "wizard.playersLabel": "Players (one per line)",
+  "wizard.playersHelp": "Add everyone playing — assign teams after.",
+  "wizard.playersCount": "{n} players",
+  "wizard.reviewNote": "Creating replaces any current pool with this fresh setup.",
 };
 
 const ES: Dict = {
@@ -427,14 +449,36 @@ const ES: Dict = {
   "admin.assign.note":
     "Define quién posee cada equipo. Los 48 pueden repartirse (ej. 4 c/u).",
   "draw.individualNote": "Equipos individuales — {price} c/u. Asignados por el organizador.",
+  "draw.individualTitle": "Paquetes de equipos",
+  "draw.personPack": "Paquete de {name}",
+  "draw.inTheCup": "Aún en la bolsa ({n})",
+  "draw.noneAssigned": "Aún no hay equipos asignados.",
   "admin.settings.apply": "Aplicar precios a los paquetes",
   "admin.settings.applyNote":
     "Reconstruye los 12 paquetes con los precios actuales. Hazlo antes de que la gente empiece a elegir.",
-  "admin.settings.danger": "Zona de peligro",
+  "admin.settings.danger": "Empezar una nueva quiniela",
+  "admin.settings.resetNote":
+    "Empezar de nuevo borra jugadores, asignaciones y resultados y deja la quiniela limpia — luego eliges el modo y agregas jugadores.",
   "admin.settings.loadDemo": "Cargar quiniela demo",
-  "admin.settings.reset": "Reiniciar quiniela",
+  "admin.settings.reset": "Borrar y empezar de nuevo",
   "admin.settings.resetConfirm":
-    "¿Reiniciar todo? Esto borra a todos los jugadores y resultados.",
+    "¿Borrar todo y empezar una nueva quiniela? Esto borra jugadores, asignaciones y resultados.",
+  "admin.results.overrideTitle": "Ajuste manual (rara vez necesario)",
+  "wizard.heading": "Configura tu quiniela",
+  "wizard.step": "Paso {n} de {total}",
+  "wizard.s1": "Básicos",
+  "wizard.s2": "Reparto",
+  "wizard.s3": "Precios",
+  "wizard.s4": "Jugadores",
+  "wizard.s5": "Revisar",
+  "wizard.next": "Siguiente",
+  "wizard.back": "Atrás",
+  "wizard.finish": "Crear quiniela",
+  "wizard.cancel": "Ir al panel",
+  "wizard.playersLabel": "Jugadores (uno por línea)",
+  "wizard.playersHelp": "Agrega a todos los que juegan — asignas equipos después.",
+  "wizard.playersCount": "{n} jugadores",
+  "wizard.reviewNote": "Crear reemplaza la quiniela actual con esta nueva configuración.",
 };
 
 const DICTS: Record<Locale, Dict> = { en: EN, es: ES };
