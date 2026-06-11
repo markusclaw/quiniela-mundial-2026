@@ -249,6 +249,10 @@ const EN: Dict = {
   "wizard.playersHelp": "Add everyone playing — assign teams after.",
   "wizard.playersCount": "{n} players",
   "wizard.reviewNote": "Creating replaces any current pool with this fresh setup.",
+  "print.title": "Print draw slips",
+  "print.help": "Print, cut along the dashed lines, fold, and drop into the cup.",
+  "print.button": "Print",
+  "print.back": "Back to Admin",
 };
 
 const ES: Dict = {
@@ -479,6 +483,10 @@ const ES: Dict = {
   "wizard.playersHelp": "Agrega a todos los que juegan — asignas equipos después.",
   "wizard.playersCount": "{n} jugadores",
   "wizard.reviewNote": "Crear reemplaza la quiniela actual con esta nueva configuración.",
+  "print.title": "Imprimir papelitos",
+  "print.help": "Imprime, recorta por las líneas punteadas, dobla y echa a la bolsa.",
+  "print.button": "Imprimir",
+  "print.back": "Volver a Admin",
 };
 
 const DICTS: Record<Locale, Dict> = { en: EN, es: ES };

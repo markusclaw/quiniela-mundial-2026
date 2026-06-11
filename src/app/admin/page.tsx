@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Settings,
   Users,
@@ -10,13 +11,14 @@ import {
   Plus,
   Copy,
   Sparkles,
+  Printer,
 } from "lucide-react";
 import { AdminGate } from "@/components/require-auth";
 import { SetupWizard } from "@/components/setup-wizard";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamChip } from "@/components/team-chip";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -58,9 +60,17 @@ function AdminInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight">{t("admin.title")}</h1>
-        <Button variant="outline" size="sm" onClick={() => setSetup(true)}>
-          <Sparkles className="h-4 w-4" /> {t("wizard.heading")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/print"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            <Printer className="h-4 w-4" /> {t("print.button")}
+          </Link>
+          <Button variant="outline" size="sm" onClick={() => setSetup(true)}>
+            <Sparkles className="h-4 w-4" /> {t("wizard.heading")}
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1 no-scrollbar">
