@@ -13,7 +13,7 @@
 const API = "https://v3.football.api-sports.io";
 const LEAGUE = 1; // FIFA World Cup
 const SEASON = 2026;
-const CACHE_TTL = 30; // seconds — one upstream call serves all viewers in window
+const CACHE_TTL = 15; // seconds — faster refresh (paid plan has the budget)
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -35,7 +35,20 @@ export default {
       const fixture = url.searchParams.get("fixture");
       if (!fixture) return json({ error: "fixture required" }, 400);
       path = `/fixtures/statistics?fixture=${encodeURIComponent(fixture)}`;
+    } else if (url.searchParams.get("date")) {
+      // Full day of World Cup fixtures: upcoming, in-play AND finished (with
+      // final scores) — so the app shows finals the moment a match ends,
+      // without waiting on the slower free results feed.
+      const p = new URLSearchParams({
+        league: String(LEAGUE),
+        season: String(SEASON),
+        date: url.searchParams.get("date"),
+      });
+      const tz = url.searchParams.get("tz");
+      if (tz) p.set("timezone", tz);
+      path = `/fixtures?${p.toString()}`;
     } else {
+      // Back-compat: in-play only.
       path = `/fixtures?league=${LEAGUE}&season=${SEASON}&live=all`;
     }
 

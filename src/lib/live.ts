@@ -9,6 +9,7 @@ const BASE = process.env.NEXT_PUBLIC_LIVE_API_URL;
 export const isLiveEnabled = Boolean(BASE);
 
 const IN_PLAY = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE", "INT"]);
+const FINISHED = new Set(["FT", "AET", "PEN"]);
 
 export interface LiveMatch {
   fixtureId: number;
@@ -21,6 +22,7 @@ export interface LiveMatch {
   minute: number | null;
   status: string; // short code: 1H, HT, 2H, FT…
   inPlay: boolean;
+  finished: boolean;
 }
 
 interface AfFixture {
@@ -29,10 +31,17 @@ interface AfFixture {
   goals?: { home?: number | null; away?: number | null };
 }
 
+/** Today's World Cup fixtures (upcoming, in-play, and finished w/ final score). */
 export async function fetchLive(): Promise<LiveMatch[]> {
   if (!BASE) return [];
   try {
-    const res = await fetch(BASE, { cache: "no-store" });
+    const url = new URL(BASE);
+    // Ask the worker for the full local day so finished matches (and their
+    // final scores) come back too — not just whatever is in-play this second.
+    url.searchParams.set("date", new Date().toLocaleDateString("en-CA"));
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) url.searchParams.set("tz", tz);
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) return [];
     const json = (await res.json()) as { response?: AfFixture[] };
     const rows = json.response ?? [];
@@ -51,6 +60,7 @@ export async function fetchLive(): Promise<LiveMatch[]> {
         minute: m.fixture?.status?.elapsed ?? null,
         status,
         inPlay: IN_PLAY.has(status),
+        finished: FINISHED.has(status),
       };
     });
   } catch {

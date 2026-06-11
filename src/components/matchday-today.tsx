@@ -20,7 +20,7 @@ import {
 } from "@/lib/live";
 
 const REFRESH_MS = 2 * 60 * 1000;
-const LIVE_MS = 60 * 1000;
+const LIVE_MS = 20 * 1000; // paid plan budget → refresh scores/minute every 20s
 
 const STAT_LABEL_KEY: Record<string, string> = {
   "Ball Possession": "stat.possession",
@@ -127,9 +127,10 @@ export function MatchdayToday() {
         loc={loc}
         live={featuredLive}
       />
-      {featuredLive?.inPlay && featuredLive.fixtureId > 0 && (
-        <LiveStats match={featuredLive} />
-      )}
+      {featuredLive && featuredLive.fixtureId > 0 &&
+        (featuredLive.inPlay || featuredLive.finished) && (
+          <LiveStats match={featuredLive} />
+        )}
       {rest.length > 0 && (
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 border-b bg-secondary/60 px-5 py-2.5">
@@ -140,7 +141,14 @@ export function MatchdayToday() {
           </div>
           <CardContent className="divide-y p-0">
             {rest.map((f, i) => (
-              <MatchRow key={i} f={f} owners={owners} loc={loc} t={t} />
+              <MatchRow
+                key={i}
+                f={f}
+                live={findLiveFor(live, f.home.id, f.away.id)}
+                owners={owners}
+                loc={loc}
+                t={t}
+              />
             ))}
           </CardContent>
         </Card>
@@ -186,35 +194,44 @@ function FeaturedMatch({
     day: "numeric",
   });
 
-  // Live (in-play) score takes priority over everything else.
-  const showLive = !!live && live.inPlay;
+  // Score orientation (the live feed may list our home team as its away team).
   const sameOrient = live ? live.homeId === f.home.id : true;
   const liveHome = live ? (sameOrient ? live.homeGoals : live.awayGoals) : 0;
   const liveAway = live ? (sameOrient ? live.awayGoals : live.homeGoals) : 0;
 
+  // In-play score takes priority over everything else.
+  const showLive = !!live && live.inPlay;
+
+  // Final score: prefer the paid API (instant), fall back to the free results
+  // feed (openfootball, slower). Two sources so we're never stuck in limbo.
+  const finalScore: [number, number] | null =
+    !showLive && live && live.finished
+      ? [liveHome, liveAway]
+      : f.score ?? null;
+  const showFinal = !showLive && finalScore != null;
+
   // Tick every second only when we're near kickoff (or it just started).
   const near =
     !f.played && f.kickoff != null && f.kickoff - Date.now() < 2 * 3600 * 1000;
-  const now = useNow(near && !showLive);
+  const now = useNow(near && !showLive && !showFinal);
   const diff = f.kickoff != null ? f.kickoff - now : null;
   const counting =
-    !showLive && diff != null && diff > 0 && diff <= 3600 * 1000; // ≤ 1h out
+    !showLive && !showFinal && diff != null && diff > 0 && diff <= 3600 * 1000; // ≤ 1h out
   // A real match lasts ~2h (90' + half-time + stoppage). Only treat it as
   // "in progress" inside that window — otherwise it's finished and we're just
-  // waiting on the free results feed to publish the final score.
+  // waiting on a score source to publish the final.
   const MATCH_WINDOW = 2.5 * 3600 * 1000;
   const sinceKickoff = diff != null ? -diff : null; // ms since kickoff
   const liveNow =
     !showLive &&
-    !f.played &&
+    !showFinal &&
     sinceKickoff != null &&
     sinceKickoff >= 0 &&
     sinceKickoff <= MATCH_WINDOW;
-  // Kickoff was long ago, no live feed, no final score yet → score pending.
+  // Kickoff was long ago, no live feed, no final score from either source yet.
   const pending =
     !showLive &&
-    !f.played &&
-    !f.score &&
+    !showFinal &&
     sinceKickoff != null &&
     sinceKickoff > MATCH_WINDOW;
 
@@ -235,7 +252,7 @@ function FeaturedMatch({
               <Radio className="h-3 w-3" /> {t("today.live")}
               {live!.minute != null ? ` ${live!.minute}'` : ""}
             </Badge>
-          ) : f.played || pending ? (
+          ) : showFinal || f.played || pending ? (
             <Badge variant="gold" className="gap-1">
               <Radio className="h-3 w-3" /> {t("today.ft")}
             </Badge>
@@ -254,9 +271,9 @@ function FeaturedMatch({
               <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
                 {liveHome}<span className="px-1 text-white/50">-</span>{liveAway}
               </div>
-            ) : f.score ? (
+            ) : showFinal ? (
               <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
-                {f.score[0]}<span className="px-1 text-white/50">-</span>{f.score[1]}
+                {finalScore![0]}<span className="px-1 text-white/50">-</span>{finalScore![1]}
               </div>
             ) : counting ? (
               <>
@@ -289,7 +306,7 @@ function FeaturedMatch({
                 {time}
               </div>
             )}
-            {!showLive && !f.played && !counting && !liveNow && !pending && f.kickoff != null && (
+            {!showLive && !showFinal && !f.played && !counting && !liveNow && !pending && f.kickoff != null && (
               <div className="mt-1 text-[11px] text-white/70">{dateLabel}</div>
             )}
           </div>
@@ -406,11 +423,13 @@ function TeamSide({
 
 function MatchRow({
   f,
+  live,
   owners,
   loc,
   t,
 }: {
   f: FixtureLite;
+  live?: LiveMatch | null;
   owners: Record<string, string>;
   loc: string;
   t: (k: string, p?: Record<string, string | number>) => string;
@@ -424,10 +443,30 @@ function MatchRow({
       : "";
   const homeOwner = f.home.id ? owners[f.home.id] : undefined;
   const awayOwner = f.away.id ? owners[f.away.id] : undefined;
+
+  // Score source priority: live API (in-play or final) → free results feed.
+  const sameOrient = live ? live.homeId === f.home.id : true;
+  const apiHome = live ? (sameOrient ? live.homeGoals : live.awayGoals) : 0;
+  const apiAway = live ? (sameOrient ? live.awayGoals : live.homeGoals) : 0;
+  const showApi = !!live && (live.inPlay || live.finished);
+  const score: [number, number] | null = showApi
+    ? [apiHome, apiAway]
+    : f.score ?? null;
+  const isLive = !!live && live.inPlay;
+  const isDone = (!!live && live.finished) || f.played;
+
   return (
     <div className="flex items-center gap-3 px-5 py-3">
       <div className="w-14 shrink-0 text-center">
-        {f.played ? (
+        {isLive ? (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-primary">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/70" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+            </span>
+            {live!.minute != null ? `${live!.minute}'` : t("today.live")}
+          </span>
+        ) : isDone ? (
           <span className="text-[10px] font-bold uppercase text-muted-foreground">
             {t("today.ft")}
           </span>
@@ -447,9 +486,9 @@ function MatchRow({
         {f.home.id && <TeamCrest teamId={f.home.id} size="sm" />}
       </div>
       <div className="shrink-0 px-1 text-center">
-        {f.score ? (
+        {score ? (
           <span className="font-mono text-sm font-bold tabular-nums">
-            {f.score[0]}-{f.score[1]}
+            {score[0]}-{score[1]}
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">vs</span>
