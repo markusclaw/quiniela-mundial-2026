@@ -13,7 +13,13 @@ create table if not exists pool_state (
 );
 
 -- Push row changes to connected clients (multi-device sync).
-alter publication supabase_realtime add table pool_state;
+-- Wrapped so re-running the script doesn't error if it's already a member.
+do $$
+begin
+  alter publication supabase_realtime add table pool_state;
+exception
+  when duplicate_object then null;
+end $$;
 
 -- ── Access control ──────────────────────────────────────────────────────────
 -- This is a PRIVATE pool guarded by the app's own name+PIN screen, and the
@@ -22,11 +28,15 @@ alter publication supabase_realtime add table pool_state;
 -- down harder later, switch to Supabase Auth and gate writes to the moderator.
 alter table pool_state enable row level security;
 
+-- Drop-then-create so the script is safe to run more than once.
+drop policy if exists "anon read pool" on pool_state;
 create policy "anon read pool" on pool_state
   for select using (true);
 
+drop policy if exists "anon upsert pool" on pool_state;
 create policy "anon upsert pool" on pool_state
   for insert with check (true);
 
+drop policy if exists "anon update pool" on pool_state;
 create policy "anon update pool" on pool_state
   for update using (true) with check (true);
