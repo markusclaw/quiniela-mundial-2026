@@ -22,7 +22,7 @@ const CORS = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS });
     }
@@ -30,34 +30,62 @@ export default {
     if (!key) return json({ error: "Missing APISPORTS_KEY secret" }, 500);
 
     const url = new URL(request.url);
+    let path;
+    if (url.pathname === "/stats") {
+      const fixture = url.searchParams.get("fixture");
+      if (!fixture) return json({ error: "fixture required" }, 400);
+      path = `/fixtures/statistics?fixture=${encodeURIComponent(fixture)}`;
+    } else {
+      path = `/fixtures?league=${LEAGUE}&season=${SEASON}&live=all`;
+    }
+
+    // Serve a recent good response from the edge cache so many viewers cost
+    // only a few upstream calls. We cache ONLY successful payloads — a
+    // transient rate-limit or upstream error must not get pinned for 30s.
+    const cache = caches.default;
+    const cacheKey = new Request(new URL(path, API).toString(), { method: "GET" });
+    const hit = await cache.match(cacheKey);
+    if (hit) return withCors(hit);
+
     try {
-      let path;
-      if (url.pathname === "/stats") {
-        const fixture = url.searchParams.get("fixture");
-        if (!fixture) return json({ error: "fixture required" }, 400);
-        path = `/fixtures/statistics?fixture=${encodeURIComponent(fixture)}`;
-      } else {
-        path = `/fixtures?league=${LEAGUE}&season=${SEASON}&live=all`;
-      }
       const upstream = await fetch(API + path, {
         headers: { "x-apisports-key": key },
-        cf: { cacheTtl: CACHE_TTL, cacheEverything: true },
       });
       const data = await upstream.json();
-      return json(data);
+
+      if (hasErrors(data)) {
+        // Don't cache — let the next poll retry immediately.
+        return json(data, 200, "no-store");
+      }
+      const res = json(data, 200, `public, max-age=${CACHE_TTL}`);
+      ctx.waitUntil(cache.put(cacheKey, res.clone()));
+      return res;
     } catch (e) {
-      return json({ error: String(e) }, 502);
+      return json({ error: String(e) }, 502, "no-store");
     }
   },
 };
 
-function json(obj, status = 200) {
+// API-Football returns errors as [] when healthy, or a populated object/array.
+function hasErrors(data) {
+  const e = data && data.errors;
+  if (!e) return false;
+  return Array.isArray(e) ? e.length > 0 : Object.keys(e).length > 0;
+}
+
+function withCors(res) {
+  const out = new Response(res.body, res);
+  for (const [k, v] of Object.entries(CORS)) out.headers.set(k, v);
+  return out;
+}
+
+function json(obj, status = 200, cacheControl = "no-store") {
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
       ...CORS,
       "content-type": "application/json",
-      "cache-control": `public, max-age=${CACHE_TTL}`,
+      "cache-control": cacheControl,
     },
   });
 }

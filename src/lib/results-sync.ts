@@ -92,6 +92,11 @@ function toId(name: unknown): string | null {
   return NAME_TO_ID[name.trim().toLowerCase()] ?? null;
 }
 
+/** Public: resolve a team name (from any feed) to our internal team id. */
+export function teamIdFromName(name: string): string | null {
+  return toId(name);
+}
+
 interface RawMatch {
   round?: string;
   group?: string;
