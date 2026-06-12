@@ -51,8 +51,9 @@ export function StandingRow({
   const teams = ownedTeamIds(s.participant, state);
   const cur = state.settings.currency;
 
-  const numTh = "px-1 py-1 text-center font-semibold";
-  const numTd = "px-1 py-1.5 text-center tabular-nums";
+  // Fixed widths so every expanded table lines its columns up identically.
+  const numTh = "w-8 px-0.5 py-1 text-center font-semibold";
+  const numTd = "w-8 px-0.5 py-1.5 text-center tabular-nums";
 
   const inner = (
     <>
@@ -113,7 +114,7 @@ export function StandingRow({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="border-b text-[10px] uppercase tracking-wide text-muted-foreground">
                     <th className="px-3 py-1.5 text-left font-semibold">
@@ -130,7 +131,7 @@ export function StandingRow({
                       {t("tbl.ga")}
                     </th>
                     <th className={numTh}>{t("tbl.gd")}</th>
-                    <th className="px-2 py-1.5 text-center font-bold">
+                    <th className="w-10 px-1 py-1.5 text-center font-bold">
                       {t("tbl.pts")}
                     </th>
                   </tr>
@@ -154,7 +155,7 @@ export function StandingRow({
                         )}
                       >
                         <td className="py-1.5 pl-3 pr-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
                             <TeamCrest teamId={b.teamId} size="xs" />
                             <span className="truncate text-sm font-medium">
                               {getTeam(b.teamId)?.name}
@@ -170,7 +171,7 @@ export function StandingRow({
                         <td className={cn(numTd, gd > 0 && "text-primary")}>
                           {gd > 0 ? `+${gd}` : gd}
                         </td>
-                        <td className="px-2 py-1.5 text-center font-extrabold tabular-nums">
+                        <td className="w-10 px-1 py-1.5 text-center font-extrabold tabular-nums">
                           {b.total}
                         </td>
                       </tr>
