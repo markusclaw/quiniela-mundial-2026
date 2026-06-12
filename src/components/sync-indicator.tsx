@@ -6,7 +6,7 @@ import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-const REFRESH_MS = 5 * 60 * 1000; // re-check every 5 min while the app is open
+const REFRESH_MS = 60 * 1000; // re-check every minute while the app is open
 
 /** Invisible: pulls results on open and on an interval. Mount once. */
 export function ResultsAutoSync() {

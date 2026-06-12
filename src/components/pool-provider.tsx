@@ -310,10 +310,21 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
         const results = { ...prev.results };
         let changed = false;
         for (const [teamId, patch] of Object.entries(incoming)) {
-          const cur = results[teamId];
-          if (!cur || cur.manual) continue;
+          const existing = results[teamId];
+          // A manual (organizer-edited) record is never overwritten.
+          if (existing?.manual) continue;
+          // Seed a default record if this team is somehow missing, so a
+          // partial/overwritten results map can't silently drop scores.
+          const cur: TeamResult = existing ?? {
+            teamId,
+            groupWins: 0,
+            groupDraws: 0,
+            groupLosses: 0,
+            stageReached: "group",
+          };
           const next = { ...cur, ...patch };
           if (
+            !existing ||
             next.groupWins !== cur.groupWins ||
             next.groupDraws !== cur.groupDraws ||
             next.groupLosses !== cur.groupLosses ||

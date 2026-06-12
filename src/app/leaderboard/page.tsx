@@ -48,7 +48,7 @@ function LeaderboardInner() {
               )}
             >
               <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-                <RankBadge rank={s.rank} />
+                <RankBadge rank={s.rank} active={s.totalPoints > 0} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-semibold">
@@ -110,8 +110,8 @@ function FlagDot({
   );
 }
 
-function RankBadge({ rank }: { rank: number }) {
-  if (rank <= 3) {
+function RankBadge({ rank, active = true }: { rank: number; active?: boolean }) {
+  if (rank <= 3 && active) {
     const colors = ["text-gold", "text-zinc-400", "text-amber-700"];
     return (
       <div className="grid h-9 w-9 shrink-0 place-items-center">

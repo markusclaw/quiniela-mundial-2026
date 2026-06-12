@@ -21,7 +21,8 @@ function DashboardInner() {
   const playing = standings.filter(
     (s) => ownedTeamIds(s.participant, state).length > 0,
   );
-  const leader = playing[0];
+  // Only crown a leader once someone has actually scored points.
+  const leader = playing[0]?.totalPoints > 0 ? playing[0] : null;
 
   return (
     <div className="space-y-6">
@@ -64,7 +65,7 @@ function DashboardInner() {
             const teams = ownedTeamIds(s.participant, state);
             return (
               <div key={s.participant.id} className="flex items-center gap-3 px-5 py-3">
-                <RankBadge rank={s.rank} />
+                <RankBadge rank={s.rank} active={s.totalPoints > 0} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{s.participant.name}</div>
                   <div className="mt-1 flex items-center gap-1.5">
@@ -132,8 +133,8 @@ function StatCard({
   );
 }
 
-function RankBadge({ rank }: { rank: number }) {
-  if (rank <= 3) {
+function RankBadge({ rank, active = true }: { rank: number; active?: boolean }) {
+  if (rank <= 3 && active) {
     const colors = ["text-gold", "text-zinc-400", "text-amber-700"];
     return (
       <div className="grid h-9 w-9 shrink-0 place-items-center">

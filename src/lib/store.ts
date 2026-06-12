@@ -103,6 +103,9 @@ export function migrateState(s: PoolState): PoolState {
   }
   delete settings.buyIns;
   if (!s.teamOwners) s.teamOwners = {};
+  // Ensure every team has a results entry (older/overwritten blobs may be
+  // missing some) so auto-sync can always record scores. Existing records win.
+  s.results = { ...freshResults(), ...(s.results ?? {}) };
   // Migrate old phase-pool scoring to the two-payout model.
   const scoring = s.scoring as ScoringConfig & { pool?: unknown };
   if (scoring && !scoring.payout) {
