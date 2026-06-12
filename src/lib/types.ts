@@ -53,6 +53,8 @@ export interface Participant {
   id: string;
   name: string;
   pin?: string;          // only the organizer uses a PIN; participants don't log in
+  email?: string;        // optional contact info (organizer-managed)
+  phone?: string;
   packageId: string | null;
   isModerator: boolean;
   joinedAt: number;

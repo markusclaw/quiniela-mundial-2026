@@ -16,6 +16,8 @@ import {
   Circle,
   ChevronDown,
   X,
+  MoreVertical,
+  Pencil,
 } from "lucide-react";
 import { AdminGate } from "@/components/require-auth";
 import { SetupWizard } from "@/components/setup-wizard";
@@ -26,12 +28,11 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatMoney } from "@/lib/utils";
 import { participantBuyIn, ownedTeamIds } from "@/lib/scoring";
 import { GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
-import type { Stage } from "@/lib/types";
+import type { Participant, Stage } from "@/lib/types";
 
 const STAGE_KEYS: { value: Stage; key: string }[] = [
   { value: "group", key: "stageOpt.group" },
@@ -207,39 +208,26 @@ function ResultsPanel() {
 }
 
 function PeopleTab() {
-  const {
-    state,
-    addParticipant,
-    removeParticipant,
-    setParticipantPaid,
-    setTeamPaid,
-    choosePackage,
-    setTeamOwner,
-  } = usePool();
+  const { state, addParticipant } = usePool();
   const { t } = useT();
   const [name, setName] = useState("");
   const individual = state.settings.distributionMode === "individual";
   const cur = state.settings.currency;
   const teamPrice = state.settings.teamPrice;
 
+  // The organizer is the login account, not a player — never list it here.
   const players = state.participants.filter((p) => !p.isModerator);
-  const owedBy = (p: (typeof state.participants)[number]) =>
-    participantBuyIn(p, state);
-  const paidBy = (p: (typeof state.participants)[number]) => {
+  const owedBy = (p: Participant) => participantBuyIn(p, state);
+  const paidBy = (p: Participant) => {
     if (individual) {
       const owned = new Set(ownedTeamIds(p, state));
-      const paidCount = (p.paidTeams ?? []).filter((id) => owned.has(id)).length;
-      return paidCount * teamPrice;
+      return (p.paidTeams ?? []).filter((id) => owned.has(id)).length * teamPrice;
     }
     return p.paid ? owedBy(p) : 0;
   };
   const collected = players.reduce((s, p) => s + paidBy(p), 0);
   const expected = players.reduce((s, p) => s + owedBy(p), 0);
   const outstanding = expected - collected;
-
-  const ownerByPkg: Record<string, string> = {};
-  for (const p of state.participants)
-    if (p.packageId) ownerByPkg[p.packageId] = p.id;
 
   const add = () => {
     if (!name.trim()) return;
@@ -249,6 +237,24 @@ function PeopleTab() {
 
   return (
     <div className="space-y-4">
+      {players.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 rounded-lg border bg-secondary/40 p-3 text-center">
+          <SummaryStat
+            label={t("admin.pay.collected")}
+            value={formatMoney(collected, cur)}
+            accent
+          />
+          <SummaryStat
+            label={t("admin.pay.outstanding")}
+            value={formatMoney(outstanding, cur)}
+          />
+          <SummaryStat
+            label={t("admin.pay.expected")}
+            value={formatMoney(expected, cur)}
+          />
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{t("admin.people.add")}</CardTitle>
@@ -272,116 +278,234 @@ function PeopleTab() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            {t("admin.people.players", { n: state.participants.length })}
+            {t("admin.people.players", { n: players.length })}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {individual
-            ? state.participants.map((p) => (
-                <PlayerRow
-                  key={p.id}
-                  p={p}
-                  owed={owedBy(p)}
-                  paid={paidBy(p)}
-                  cur={cur}
-                  teamPrice={teamPrice}
-                />
-              ))
-            : state.participants.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex flex-wrap items-center gap-2 border-b py-2 last:border-0"
-                >
-                  <div className="flex min-w-[6rem] flex-wrap items-center gap-1.5 font-medium">
-                    <span className="break-words">{p.name}</span>
-                    {p.isModerator && (
-                      <Badge variant="muted">{t("lb.organizer")}</Badge>
-                    )}
-                  </div>
-                  <Select
-                    value={p.packageId ?? ""}
-                    onChange={(e) => choosePackage(p.id, e.target.value)}
-                    className="h-9 flex-1 min-w-[160px]"
-                  >
-                    <option value="">{t("admin.people.noPackage")}</option>
-                    {state.packages.map((k) => {
-                      const taken =
-                        ownerByPkg[k.id] && ownerByPkg[k.id] !== p.id;
-                      return (
-                        <option key={k.id} value={k.id} disabled={!!taken}>
-                          {k.label} ·{" "}
-                          {formatMoney(k.buyIn, state.settings.currency)}
-                          {taken ? t("admin.people.taken") : ""}
-                        </option>
-                      );
-                    })}
-                  </Select>
-                  {!p.isModerator && (
-                    <button
-                      type="button"
-                      onClick={() => setParticipantPaid(p.id, !p.paid)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
-                        p.paid
-                          ? "border-primary/30 bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-secondary",
-                      )}
-                      aria-pressed={!!p.paid}
-                    >
-                      {p.paid ? (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      ) : (
-                        <Circle className="h-3.5 w-3.5" />
-                      )}
-                      {p.paid ? t("admin.pay.paid") : t("admin.pay.owes")}
-                      <span className="tabular-nums">
-                        {formatMoney(owedBy(p), cur)}
-                      </span>
-                    </button>
-                  )}
-                  {!p.isModerator && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeParticipant(p.id)}
-                      aria-label={t("common.remove")}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-
-          {players.length > 0 && (
-            <div className="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-secondary/50 p-3 text-center">
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {t("admin.pay.collected")}
-                </div>
-                <div className="font-bold tabular-nums text-primary">
-                  {formatMoney(collected, cur)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {t("admin.pay.outstanding")}
-                </div>
-                <div className="font-bold tabular-nums">
-                  {formatMoney(outstanding, cur)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {t("admin.pay.expected")}
-                </div>
-                <div className="font-bold tabular-nums">
-                  {formatMoney(expected, cur)}
-                </div>
-              </div>
-            </div>
+          {players.length === 0 && (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              {t("admin.people.none")}
+            </p>
+          )}
+          {players.map((p) =>
+            individual ? (
+              <PlayerRow
+                key={p.id}
+                p={p}
+                owed={owedBy(p)}
+                paid={paidBy(p)}
+                cur={cur}
+                teamPrice={teamPrice}
+              />
+            ) : (
+              <PackageRow key={p.id} p={p} owed={owedBy(p)} cur={cur} />
+            ),
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className={cn("text-lg font-bold tabular-nums", accent && "text-primary")}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// Kebab menu so Delete can't be hit by accident; Delete also confirms.
+function PlayerMenu({
+  name,
+  onEdit,
+  onDelete,
+}: {
+  name: string;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative shrink-0">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={t("admin.people.menu")}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </Button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            className="fixed inset-0 z-30 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 z-40 mt-1 w-40 overflow-hidden rounded-md border bg-background py-1 shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-secondary"
+            >
+              <Pencil className="h-4 w-4" /> {t("common.edit")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                if (window.confirm(t("admin.people.confirmDelete", { name })))
+                  onDelete();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-secondary"
+            >
+              <Trash2 className="h-4 w-4" /> {t("common.remove")}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PlayerEditForm({ p, onClose }: { p: Participant; onClose: () => void }) {
+  const { updateParticipant } = usePool();
+  const { t } = useT();
+  const [name, setName] = useState(p.name);
+  const [email, setEmail] = useState(p.email ?? "");
+  const [phone, setPhone] = useState(p.phone ?? "");
+  const save = () => {
+    if (!name.trim()) return;
+    updateParticipant(p.id, {
+      name: name.trim(),
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+    });
+    onClose();
+  };
+  return (
+    <div className="space-y-3 border-t bg-secondary/30 px-3 py-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="space-y-1">
+          <Label>{t("admin.people.name")}</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>{t("admin.people.email")}</Label>
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t("admin.people.emailPh")}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>{t("admin.people.phone")}</Label>
+          <Input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder={t("admin.people.phonePh")}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button size="sm" onClick={save}>
+          {t("common.save")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Package modes: pick a package + paid toggle, with edit/delete in a menu.
+function PackageRow({
+  p,
+  owed,
+  cur,
+}: {
+  p: Participant;
+  owed: number;
+  cur: string;
+}) {
+  const { state, choosePackage, setParticipantPaid, removeParticipant } =
+    usePool();
+  const { t } = useT();
+  const [editing, setEditing] = useState(false);
+  const ownerByPkg: Record<string, string> = {};
+  for (const x of state.participants)
+    if (x.packageId) ownerByPkg[x.packageId] = x.id;
+
+  return (
+    <div className="rounded-lg border">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <span className="min-w-[5rem] flex-1 break-words font-medium">
+          {p.name}
+        </span>
+        <Select
+          value={p.packageId ?? ""}
+          onChange={(e) => choosePackage(p.id, e.target.value)}
+          className="h-9 flex-1 min-w-[150px]"
+        >
+          <option value="">{t("admin.people.noPackage")}</option>
+          {state.packages.map((k) => {
+            const taken = ownerByPkg[k.id] && ownerByPkg[k.id] !== p.id;
+            return (
+              <option key={k.id} value={k.id} disabled={!!taken}>
+                {k.label} · {formatMoney(k.buyIn, cur)}
+                {taken ? t("admin.people.taken") : ""}
+              </option>
+            );
+          })}
+        </Select>
+        <button
+          type="button"
+          onClick={() => setParticipantPaid(p.id, !p.paid)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+            p.paid
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:bg-secondary",
+          )}
+          aria-pressed={!!p.paid}
+        >
+          {p.paid ? (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : (
+            <Circle className="h-3.5 w-3.5" />
+          )}
+          {p.paid ? t("admin.pay.paid") : t("admin.pay.owes")}
+          <span className="tabular-nums">{formatMoney(owed, cur)}</span>
+        </button>
+        <PlayerMenu
+          name={p.name}
+          onEdit={() => setEditing(true)}
+          onDelete={() => removeParticipant(p.id)}
+        />
+      </div>
+      {editing && <PlayerEditForm p={p} onClose={() => setEditing(false)} />}
     </div>
   );
 }
@@ -395,7 +519,7 @@ function PlayerRow({
   cur,
   teamPrice,
 }: {
-  p: { id: string; name: string; isModerator: boolean; paidTeams?: string[] };
+  p: Participant;
   owed: number;
   paid: number;
   cur: string;
@@ -404,8 +528,9 @@ function PlayerRow({
   const { state, removeParticipant, setTeamOwner, setTeamPaid } = usePool();
   const { t } = useT();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
 
-  const owned = ownedTeamIds(p as never, state);
+  const owned = ownedTeamIds(p, state);
   const paidSet = new Set(p.paidTeams ?? []);
   const fullyPaid = owed > 0 && paid >= owed;
 
@@ -424,39 +549,33 @@ function PlayerRow({
             )}
           />
           <span className="break-words">{p.name}</span>
-          {p.isModerator && <Badge variant="muted">{t("lb.organizer")}</Badge>}
           <span className="text-xs font-normal text-muted-foreground">
             · {owned.length} {t("admin.people.teamsCount")}
           </span>
         </button>
-        {!p.isModerator && (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
-              fullyPaid
-                ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            {fullyPaid ? (
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            ) : (
-              <Circle className="h-3.5 w-3.5" />
-            )}
-            {formatMoney(paid, cur)} / {formatMoney(owed, cur)}
-          </span>
-        )}
-        {!p.isModerator && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => removeParticipant(p.id)}
-            aria-label={t("common.remove")}
-          >
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
-        )}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
+            fullyPaid
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          {fullyPaid ? (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : (
+            <Circle className="h-3.5 w-3.5" />
+          )}
+          {formatMoney(paid, cur)} / {formatMoney(owed, cur)}
+        </span>
+        <PlayerMenu
+          name={p.name}
+          onEdit={() => setEditing(true)}
+          onDelete={() => removeParticipant(p.id)}
+        />
       </div>
+
+      {editing && <PlayerEditForm p={p} onClose={() => setEditing(false)} />}
 
       {open && (
         <div className="space-y-2 border-t px-3 py-3">
@@ -502,30 +621,28 @@ function PlayerRow({
             );
           })}
 
-          {!p.isModerator && (
-            <Select
-              value=""
-              onChange={(e) => e.target.value && setTeamOwner(e.target.value, p.id)}
-              className="h-9 w-full"
-            >
-              <option value="">+ {t("admin.people.addTeam")}</option>
-              {GROUP_IDS.map((g) => {
-                const free = teamsByGroup(g).filter(
-                  (tm) => !state.teamOwners?.[tm.id],
-                );
-                if (!free.length) return null;
-                return (
-                  <optgroup key={g} label={t("fx.group", { g })}>
-                    {free.map((tm) => (
-                      <option key={tm.id} value={tm.id}>
-                        {tm.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                );
-              })}
-            </Select>
-          )}
+          <Select
+            value=""
+            onChange={(e) => e.target.value && setTeamOwner(e.target.value, p.id)}
+            className="h-9 w-full"
+          >
+            <option value="">+ {t("admin.people.addTeam")}</option>
+            {GROUP_IDS.map((g) => {
+              const free = teamsByGroup(g).filter(
+                (tm) => !state.teamOwners?.[tm.id],
+              );
+              if (!free.length) return null;
+              return (
+                <optgroup key={g} label={t("fx.group", { g })}>
+                  {free.map((tm) => (
+                    <option key={tm.id} value={tm.id}>
+                      {tm.name}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </Select>
         </div>
       )}
     </div>
