@@ -526,6 +526,15 @@ function MatchMiniCard({
   const isLive = !!live && live.inPlay;
   const isDone = (!!live && live.finished) || f.played || !!f.score;
 
+  const isTodayMatch = f.date === new Date().toLocaleDateString("en-CA");
+  const dayLabel = isTodayMatch
+    ? t("today.title")
+    : new Date(`${f.date}T12:00:00`).toLocaleDateString(loc, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+
   const side = (
     s: { id: string | null; name: string },
     goals: number | null,
@@ -559,10 +568,20 @@ function MatchMiniCard({
 
   return (
     <div className="w-[200px] shrink-0 rounded-xl border bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {f.label}
-        </span>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {f.label}
+          </div>
+          <div
+            className={
+              "text-[10px] font-semibold capitalize " +
+              (isTodayMatch ? "text-primary" : "text-muted-foreground")
+            }
+          >
+            {dayLabel}
+          </div>
+        </div>
         {isLive ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
             <span className="relative flex h-1.5 w-1.5">

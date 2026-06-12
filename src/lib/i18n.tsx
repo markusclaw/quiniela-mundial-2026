@@ -66,8 +66,10 @@ const EN: Dict = {
   "home.potSub": "total in play",
   "home.players": "Players",
   "home.playersSub": "in the pool",
-  "home.leader": "Leader",
+  "home.leader": "Points leader",
   "home.leaderSub": "{pts} pts",
+  "home.goalsLeader": "Top goals",
+  "home.goalsLeaderSub": "{goals} goals",
   "home.standings": "Standings",
   "home.fullTable": "Full table",
   "admin.login.title": "Organizer access",
@@ -282,14 +284,17 @@ const EN: Dict = {
   "print.back": "Back to Admin",
   "rules.title": "How it works",
   "rules.intro":
-    "Welcome to the pool! Everyone owns a few teams in the World Cup. As your teams win games and move through the tournament, you earn points. When it's all over, the money — the whole pot from everyone's buy-ins — is split between two winners.",
-  "rules.waysTitle": "Two ways to win",
+    "Welcome to the pool! Everyone owns a few teams in the World Cup. As your teams win games and move through the tournament, you earn points. When it's all over, the money — the whole pot from everyone's buy-ins — is split between three winners.",
+  "rules.waysTitle": "Three ways to win",
   "rules.champion.title": "1. Own the champion",
   "rules.champion.body":
     "Whoever owns the team that wins the World Cup takes the biggest prize — the champion's share of the pot. Get the winning team and you've hit the jackpot.",
   "rules.points.title": "2. Most points",
   "rules.points.body":
-    "Whoever's teams add up to the most points across the whole tournament wins the second prize. So even if you don't own the champion, a great mix of teams that keep winning and advancing can pay off big.",
+    "Whoever's teams add up to the most points across the whole tournament wins this prize. So even if you don't own the champion, a great mix of teams that keep winning and advancing can pay off big.",
+  "rules.goals.title": "3. Most goals",
+  "rules.goals.body":
+    "Whoever's teams score the most goals all tournament long wins this prize too — add up every goal scored by all the teams you own. A high-scoring pack pays, even if it doesn't go far.",
   "rules.how.title": "How points work",
   "rules.how.body":
     "It's simple: your teams earn points for winning games in the group stage, and earn more each round they advance — the deeper a team goes, the more it's worth. The more teams you own, the more chances you have to rack up points, so owning extra teams really pays off.",
@@ -354,8 +359,10 @@ const ES: Dict = {
   "home.potSub": "total en juego",
   "home.players": "Jugadores",
   "home.playersSub": "en la quiniela",
-  "home.leader": "Líder",
+  "home.leader": "Líder de puntos",
   "home.leaderSub": "{pts} pts",
+  "home.goalsLeader": "Más goles",
+  "home.goalsLeaderSub": "{goals} goles",
   "home.standings": "Clasificación",
   "home.fullTable": "Tabla completa",
   "admin.login.title": "Acceso de organizador",
@@ -564,14 +571,17 @@ const ES: Dict = {
   "print.back": "Volver a Admin",
   "rules.title": "Cómo funciona",
   "rules.intro":
-    "¡Bienvenido a la quiniela! A cada quien le tocan unos cuantos equipos del Mundial. Cada vez que tus equipos ganan o pasan de ronda, vas juntando puntos. Cuando termina el torneo, todo el dinero de las entradas (el bote) se reparte entre dos ganadores.",
-  "rules.waysTitle": "Dos formas de ganar",
+    "¡Bienvenido a la quiniela! A cada quien le tocan unos cuantos equipos del Mundial. Cada vez que tus equipos ganan o pasan de ronda, vas juntando puntos. Cuando termina el torneo, todo el dinero de las entradas (el bote) se reparte entre tres ganadores.",
+  "rules.waysTitle": "Tres formas de ganar",
   "rules.champion.title": "1. Tener al campeón",
   "rules.champion.body":
     "Quien tenga al equipo que gana el Mundial se lleva el premio más grande: la parte del campeón. Si te toca el equipo ganador, te sacaste la lotería.",
   "rules.points.title": "2. Más puntos",
   "rules.points.body":
-    "Quien junte más puntos entre todos sus equipos durante el torneo gana el segundo premio. Así que aunque no tengas al campeón, una buena combinación de equipos que sigan ganando y avanzando puede pagar muy bien.",
+    "Quien junte más puntos entre todos sus equipos durante el torneo gana este premio. Así que aunque no tengas al campeón, una buena combinación de equipos que sigan ganando y avanzando puede pagar muy bien.",
+  "rules.goals.title": "3. Más goles",
+  "rules.goals.body":
+    "Quien meta más goles entre todos sus equipos durante el torneo también gana premio: se suman todos los goles que anoten los equipos que te tocaron. Un grupo goleador paga, aunque no llegue lejos.",
   "rules.how.title": "Cómo se suman los puntos",
   "rules.how.body":
     "Es sencillo: tus equipos suman puntos por ganar partidos en la fase de grupos, y suman más por cada ronda que avanzan — entre más lejos llega un equipo, más vale. Entre más equipos tengas, más oportunidades de juntar puntos, así que tener equipos de más sí conviene.",

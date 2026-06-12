@@ -52,6 +52,7 @@ function freshResults(): Record<string, TeamResult> {
       groupWins: 0,
       groupDraws: 0,
       groupLosses: 0,
+      goalsFor: 0,
       stageReached: "group",
     };
   }
@@ -106,10 +107,10 @@ export function migrateState(s: PoolState): PoolState {
   // Ensure every team has a results entry (older/overwritten blobs may be
   // missing some) so auto-sync can always record scores. Existing records win.
   s.results = { ...freshResults(), ...(s.results ?? {}) };
-  // Migrate old phase-pool scoring to the two-payout model.
+  // Migrate scoring to the three-payout model (champion / points / goals).
   const scoring = s.scoring as ScoringConfig & { pool?: unknown };
-  if (scoring && !scoring.payout) {
-    scoring.payout = { champion: 0.6, points: 0.4 };
+  if (scoring && (!scoring.payout || typeof scoring.payout.goals !== "number")) {
+    scoring.payout = { champion: 7 / 12, points: 5 / 24, goals: 5 / 24 };
   }
   if (scoring) delete scoring.pool;
   // Always re-assert the organizer PIN so login works on any saved pool.

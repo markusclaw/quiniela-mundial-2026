@@ -42,6 +42,7 @@ export interface TeamResult {
   groupWins: number;
   groupDraws: number;
   groupLosses: number;
+  goalsFor?: number; // total goals the team has scored (all stages)
   stageReached: Stage; // furthest stage reached / eliminated
   manual?: boolean; // true = moderator-edited; auto-sync won't overwrite it
 }
@@ -68,11 +69,13 @@ export interface ScoringConfig {
   final: number;
   champion: number;
   underdogMultiplier: number; // applied to knockout milestones for Pot 3/4 teams
-  // Two payouts (must sum to 1): the World Cup champion's owner, and the
-  // participant whose teams earned the most points overall.
+  // Three payouts (must sum to 1): the World Cup champion's owner, the
+  // participant whose teams earned the most points, and the participant whose
+  // teams scored the most goals overall.
   payout: {
     champion: number;
     points: number;
+    goals: number;
   };
 }
 

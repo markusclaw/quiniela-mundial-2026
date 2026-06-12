@@ -168,6 +168,7 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       groupWins: 0,
       groupDraws: 0,
       groupLosses: 0,
+      goalsFor: 0,
       stageReached: "group",
     });
 
@@ -196,6 +197,8 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       const t2 = ensure(id2);
       addGoals(id1, a, b);
       addGoals(id2, b, a);
+      t1.goalsFor = (t1.goalsFor ?? 0) + a;
+      t2.goalsFor = (t2.goalsFor ?? 0) + b;
       if (a > b) {
         t1.groupWins++;
         t2.groupLosses++;
@@ -222,6 +225,11 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
         stageRank[id] = ks.rank;
         ensure(id).stageReached = ks.stage;
       }
+    }
+    // Count knockout goals toward each team's total (regulation/ET, not pens).
+    if (score && id1 && id2) {
+      ensure(id1).goalsFor = (ensure(id1).goalsFor ?? 0) + score[0];
+      ensure(id2).goalsFor = (ensure(id2).goalsFor ?? 0) + score[1];
     }
     // Champion = winner of the Final (penalties / extra time aware).
     if (ks.stage === "final" && id1 && id2) {
@@ -286,6 +294,7 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       groupWins: t.groupWins,
       groupDraws: t.groupDraws,
       groupLosses: t.groupLosses,
+      goalsFor: t.goalsFor ?? 0,
       stageReached: t.stageReached,
     };
   }

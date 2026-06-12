@@ -1,6 +1,6 @@
 "use client";
 
-import { Trophy, Flame, Crown } from "lucide-react";
+import { Trophy, Flame, Crown, Target } from "lucide-react";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -13,6 +13,7 @@ function RulesInner() {
   const s = state.scoring;
   const championPct = Math.round(s.payout.champion * 100);
   const pointsPct = Math.round(s.payout.points * 100);
+  const goalsPct = Math.round((s.payout.goals ?? 0) * 100);
 
   const pointRows: { label: string; value: string }[] = [
     { label: t("rules.pt.groupWin"), value: `+${s.groupWin}` },
@@ -68,6 +69,24 @@ function RulesInner() {
         <CardContent>
           <p className="leading-relaxed text-muted-foreground">
             {t("rules.points.body")}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Payout 3: Most goals */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Target className="h-5 w-5 text-primary" />
+            {t("rules.goals.title")}
+            <Badge variant="default" className="ml-auto text-sm">
+              {goalsPct}%
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="leading-relaxed text-muted-foreground">
+            {t("rules.goals.body")}
           </p>
         </CardContent>
       </Card>

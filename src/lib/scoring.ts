@@ -17,10 +17,13 @@ export const DEFAULT_SCORING: ScoringConfig = {
   final: 34,
   champion: 55,
   underdogMultiplier: 1.5, // Pot 3 & 4 teams on knockout milestones
-  // Two payouts (must sum to 1).
+  // Three payouts (must sum to 1): champion 7/12, most points 5/24, most
+  // goals 5/24 — i.e. the winner takes ~58.3%, and the remaining ~41.7% is
+  // split evenly between the most-points and most-goals winners.
   payout: {
-    champion: 0.6, // owner of the World Cup winner
-    points: 0.4, // participant with the most points overall
+    champion: 7 / 12, // ≈ 0.5833 — owner of the World Cup winner
+    points: 5 / 24, // ≈ 0.2083 — most points overall
+    goals: 5 / 24, // ≈ 0.2083 — most goals scored overall
   },
 };
 
@@ -87,8 +90,17 @@ export interface ParticipantStanding {
   teamBreakdowns: TeamPointsBreakdown[];
   teamPointsTotal: number;
   totalPoints: number;
+  totalGoals: number; // goals scored by all owned teams
   potShare: number; // currency owed so far
   rank: number;
+}
+
+/** Total goals scored by all teams a participant owns. */
+export function participantGoals(p: Participant, state: PoolState): number {
+  return ownedTeamIds(p, state).reduce(
+    (sum, tid) => sum + (state.results[tid]?.goalsFor ?? 0),
+    0,
+  );
 }
 
 /** Team ids owned by a participant — works in every distribution mode. */
@@ -168,25 +180,32 @@ export function computeStandings(state: PoolState): ParticipantStanding[] {
       teamBreakdowns,
       teamPointsTotal,
       totalPoints: teamPointsTotal,
+      totalGoals: participantGoals(participant, state),
     };
   });
 
   const sorted = [...base].sort((a, b) => b.totalPoints - a.totalPoints);
   const champId = championOwnerId(state);
 
-  // Everyone tied for the top total splits the points prize evenly.
-  const topPoints = sorted[0]?.totalPoints ?? 0;
-  const pointsLeaders =
-    topPoints > 0
-      ? sorted.filter((st) => st.totalPoints === topPoints).map((st) => st.participant.id)
+  // Everyone tied for the top total splits that prize evenly.
+  const leadersBy = (sel: (st: (typeof base)[number]) => number): string[] => {
+    const top = Math.max(0, ...base.map(sel));
+    return top > 0
+      ? base.filter((st) => sel(st) === top).map((st) => st.participant.id)
       : [];
+  };
+  const pointsLeaders = leadersBy((st) => st.totalPoints);
+  const goalsLeaders = leadersBy((st) => st.totalGoals);
 
   const shares: Record<string, number> = {};
+  const award = (ids: string[], pool: number) => {
+    if (!ids.length) return;
+    const each = pool / ids.length;
+    for (const id of ids) shares[id] = (shares[id] ?? 0) + each;
+  };
   if (champId) shares[champId] = (shares[champId] ?? 0) + pot * s.payout.champion;
-  if (pointsLeaders.length) {
-    const each = (pot * s.payout.points) / pointsLeaders.length;
-    for (const id of pointsLeaders) shares[id] = (shares[id] ?? 0) + each;
-  }
+  award(pointsLeaders, pot * s.payout.points);
+  award(goalsLeaders, pot * (s.payout.goals ?? 0));
 
   return sorted.map((st, i) => ({
     ...st,

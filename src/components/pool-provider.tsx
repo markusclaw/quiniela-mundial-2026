@@ -320,6 +320,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             groupWins: 0,
             groupDraws: 0,
             groupLosses: 0,
+            goalsFor: 0,
             stageReached: "group",
           };
           const next = { ...cur, ...patch };
@@ -328,6 +329,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             next.groupWins !== cur.groupWins ||
             next.groupDraws !== cur.groupDraws ||
             next.groupLosses !== cur.groupLosses ||
+            (next.goalsFor ?? 0) !== (cur.goalsFor ?? 0) ||
             next.stageReached !== cur.stageReached
           ) {
             results[teamId] = next;

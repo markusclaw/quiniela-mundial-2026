@@ -72,6 +72,9 @@ function LeaderboardInner() {
                   <div className="text-[11px] text-muted-foreground">
                     {t("lb.pts")}
                   </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {t("home.goalsLeaderSub", { goals: s.totalGoals })}
+                  </div>
                   <div className="mt-1 text-sm font-semibold text-primary">
                     {formatMoney(s.potShare, state.settings.currency)}
                   </div>

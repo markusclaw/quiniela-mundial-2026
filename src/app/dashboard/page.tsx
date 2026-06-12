@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Trophy, Users, Crown, Medal, ArrowRight } from "lucide-react";
+import { Trophy, Users, Crown, Medal, ArrowRight, Target } from "lucide-react";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -23,12 +23,14 @@ function DashboardInner() {
   );
   // Only crown a leader once someone has actually scored points.
   const leader = playing[0]?.totalPoints > 0 ? playing[0] : null;
+  const goalsTop = [...playing].sort((a, b) => b.totalGoals - a.totalGoals)[0];
+  const goalsLeader = goalsTop?.totalGoals > 0 ? goalsTop : null;
 
   return (
     <div className="space-y-6">
       <MatchdayToday />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Crown}
           label={t("home.pot")}
@@ -47,6 +49,16 @@ function DashboardInner() {
           label={t("home.leader")}
           value={leader?.participant.name ?? "—"}
           sub={leader ? t("home.leaderSub", { pts: leader.totalPoints }) : ""}
+        />
+        <StatCard
+          icon={Target}
+          label={t("home.goalsLeader")}
+          value={goalsLeader?.participant.name ?? "—"}
+          sub={
+            goalsLeader
+              ? t("home.goalsLeaderSub", { goals: goalsLeader.totalGoals })
+              : ""
+          }
         />
       </div>
 
