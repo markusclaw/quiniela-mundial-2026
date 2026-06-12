@@ -361,7 +361,7 @@ const ES: Dict = {
   "home.playersSub": "en la quiniela",
   "home.leader": "Líder de puntos",
   "home.leaderSub": "{pts} pts",
-  "home.goalsLeader": "Más goles",
+  "home.goalsLeader": "Líder de goles",
   "home.goalsLeaderSub": "{goals} goles",
   "home.standings": "Clasificación",
   "home.fullTable": "Tabla completa",
