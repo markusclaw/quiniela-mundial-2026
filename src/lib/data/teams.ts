@@ -93,6 +93,27 @@ export function teamsByGroup(group: GroupId): Team[] {
   return TEAMS.filter((t) => t.group === group);
 }
 
+// A representative flag color per team (RGB), used to tint the hero background.
+const TEAM_COLORS: Record<string, [number, number, number]> = {
+  MEX: [0, 104, 71], RSA: [0, 119, 73], KOR: [205, 46, 58], CZE: [17, 69, 126],
+  CAN: [213, 43, 30], BIH: [0, 20, 137], QAT: [138, 21, 56], SUI: [213, 43, 30],
+  BRA: [0, 151, 57], MAR: [193, 39, 45], HAI: [0, 32, 145], SCO: [0, 90, 170],
+  USA: [10, 49, 97], PAR: [213, 43, 30], AUS: [0, 103, 71], TUR: [227, 10, 23],
+  GER: [221, 0, 0], CUW: [0, 33, 118], CIV: [255, 130, 0], ECU: [255, 209, 0],
+  NED: [255, 102, 0], JPN: [188, 0, 45], SWE: [0, 106, 167], TUN: [225, 0, 0],
+  BEL: [255, 205, 0], EGY: [206, 17, 38], IRN: [35, 159, 64], NZL: [0, 33, 113],
+  ESP: [170, 21, 27], CPV: [0, 56, 147], KSA: [22, 93, 48], URU: [0, 56, 168],
+  FRA: [0, 35, 149], SEN: [0, 135, 81], IRQ: [206, 17, 38], NOR: [186, 12, 47],
+  ARG: [108, 172, 228], ALG: [0, 98, 51], AUT: [237, 28, 36], JOR: [0, 122, 61],
+  POR: [218, 41, 28], COD: [0, 114, 206], UZB: [0, 153, 219], COL: [252, 209, 22],
+  ENG: [206, 17, 38], CRO: [215, 0, 0], GHA: [0, 107, 63], PAN: [0, 32, 91],
+};
+
+/** Team flag color (RGB), falling back to brand green. */
+export function teamColor(id: string | null | undefined): [number, number, number] {
+  return (id && TEAM_COLORS[id]) || [16, 74, 56];
+}
+
 export function teamsByPot(pot: 1 | 2 | 3 | 4): Team[] {
   return TEAMS.filter((t) => t.pot === pot).sort((a, b) => a.fifaRank - b.fifaRank);
 }

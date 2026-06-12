@@ -7,8 +7,9 @@ import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getTeam } from "@/lib/data/teams";
+import { getTeam, teamColor } from "@/lib/data/teams";
 import { ownerMap } from "@/lib/scoring";
+import { SilkBackground } from "@/components/ui/silk-background";
 import { fetchFixtures, type FixtureLite } from "@/lib/results-sync";
 import {
   fetchLive,
@@ -367,7 +368,13 @@ function FeaturedMatch({
     : "";
 
   return (
-    <div className="pitch-stripes relative overflow-hidden rounded-xl text-primary-foreground">
+    <div className="relative overflow-hidden rounded-xl bg-primary text-primary-foreground">
+      <SilkBackground
+        className="absolute inset-0 h-full w-full"
+        homeColor={teamColor(f.home.id)}
+        awayColor={teamColor(f.away.id)}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40" />
       <div className="relative z-10 p-5 sm:p-7">
         <div className="mb-5 flex flex-col items-center gap-1.5 text-center">
           {showLive ? (
