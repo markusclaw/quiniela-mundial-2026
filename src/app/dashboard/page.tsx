@@ -61,11 +61,11 @@ function DashboardInner() {
           </Link>
         </div>
         <CardContent className="divide-y p-0">
-          {playing.slice(0, 5).map((s) => {
+          {playing.slice(0, 5).map((s, i) => {
             const teams = ownedTeamIds(s.participant, state);
             return (
               <div key={s.participant.id} className="flex items-center gap-3 px-5 py-3">
-                <RankBadge rank={s.rank} active={s.totalPoints > 0} />
+                <RankBadge rank={i + 1} active={s.totalPoints > 0} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{s.participant.name}</div>
                   <div className="mt-1 flex items-center gap-1.5">

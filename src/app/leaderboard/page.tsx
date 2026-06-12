@@ -36,7 +36,7 @@ function LeaderboardInner() {
       </div>
 
       <div className="space-y-2">
-        {playing.map((s) => {
+        {playing.map((s, i) => {
           const teams = ownedTeamIds(s.participant, state);
           const isMe = s.participant.id === me?.id;
           return (
@@ -48,7 +48,7 @@ function LeaderboardInner() {
               )}
             >
               <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-                <RankBadge rank={s.rank} active={s.totalPoints > 0} />
+                <RankBadge rank={i + 1} active={s.totalPoints > 0} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-semibold">
