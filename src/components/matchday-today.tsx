@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, MapPin, Radio, User, BarChart3 } from "lucide-react";
+import { CalendarDays, MapPin, Radio, User, BarChart3, Target } from "lucide-react";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
@@ -13,10 +13,14 @@ import { fetchFixtures, type FixtureLite } from "@/lib/results-sync";
 import {
   fetchLive,
   fetchStats,
+  fetchEvents,
   findLiveFor,
   isLiveEnabled,
+  LIVE_PERIOD_KEY,
+  SHOW_MINUTE,
   type LiveMatch,
   type TeamStat,
+  type MatchEvent,
 } from "@/lib/live";
 
 const REFRESH_MS = 2 * 60 * 1000;
@@ -173,10 +177,6 @@ export function MatchdayToday() {
         loc={loc}
         live={heroLive}
       />
-      {heroLive && heroLive.fixtureId > 0 &&
-        (heroLive.inPlay || heroLive.finished) && (
-          <LiveStats match={heroLive} />
-        )}
       {rest.length > 0 && (
         <MiniCardRow
           title={t("today.upNext")}
@@ -318,14 +318,62 @@ function FeaturedMatch({
         })
       : t("today.vs");
 
+  // Live detail: period label, goal scorers, and nested stats.
+  const fixtureId = live?.fixtureId ?? 0;
+  const hasDetail = !!live && fixtureId > 0 && (live.inPlay || live.finished);
+  const periodKey = live ? LIVE_PERIOD_KEY[live.status] ?? "today.live" : "today.live";
+  const showMin = !!live && SHOW_MINUTE.has(live.status) && live.minute != null;
+
+  const [events, setEvents] = useState<MatchEvent[]>([]);
+  useEffect(() => {
+    if (!hasDetail) {
+      setEvents([]);
+      return;
+    }
+    let on = true;
+    fetchEvents(fixtureId).then((e) => on && setEvents(e));
+    return () => {
+      on = false;
+    };
+    // refetch when the score changes (a new goal happened)
+  }, [hasDetail, fixtureId, liveHome, liveAway]);
+  const goals = events.filter(
+    (e) => e.type?.toLowerCase() === "goal" && e.detail !== "Missed Penalty",
+  );
+  const scorerTeamId = (e: MatchEvent): string | null => {
+    if (!live) return null;
+    if (e.teamName === live.homeName) return live.homeId;
+    if (e.teamName === live.awayName) return live.awayId;
+    return null;
+  };
+  const evMin = (e: MatchEvent) =>
+    e.minute != null ? `${e.minute}${e.extra ? `+${e.extra}` : ""}'` : "";
+
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [stats, setStats] = useState<TeamStat[] | null>(null);
+  useEffect(() => {
+    if (!statsOpen || !hasDetail) return;
+    let on = true;
+    fetchStats(fixtureId).then((s) => on && setStats(s));
+    return () => {
+      on = false;
+    };
+  }, [statsOpen, hasDetail, fixtureId, liveHome, liveAway]);
+  const statHome = live
+    ? (live.homeId ? getTeam(live.homeId)?.name ?? live.homeName : live.homeName)
+    : "";
+  const statAway = live
+    ? (live.awayId ? getTeam(live.awayId)?.name ?? live.awayName : live.awayName)
+    : "";
+
   return (
     <div className="pitch-stripes relative overflow-hidden rounded-xl text-primary-foreground">
       <div className="relative z-10 p-5 sm:p-7">
         <div className="mb-5 flex flex-col items-center gap-1.5 text-center">
           {showLive ? (
             <Badge variant="gold" className="gap-1">
-              <Radio className="h-3 w-3" /> {t("today.live")}
-              {live!.minute != null ? ` ${live!.minute}'` : ""}
+              <Radio className="h-3 w-3" /> {t(periodKey)}
+              {showMin ? ` ${live!.minute}'` : ""}
             </Badge>
           ) : showFinal || f.played || pending ? (
             <Badge variant="gold" className="gap-1">
@@ -386,7 +434,31 @@ function FeaturedMatch({
           <TeamSide id={f.away.id} name={teamName(f.away)} owner={f.away.id ? owners[f.away.id] : undefined} />
         </div>
 
-        <div className="mt-5 flex flex-col items-center gap-0.5 text-center text-xs text-white/75">
+        {/* Goal scorers */}
+        {goals.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-white/90">
+            <Target className="h-3.5 w-3.5 text-white/70" />
+            {goals.map((e, i) => {
+              const tid = scorerTeamId(e);
+              return (
+                <span key={i} className="inline-flex items-center gap-1">
+                  {tid && <TeamCrest teamId={tid} size="xs" />}
+                  <span className="font-semibold tabular-nums">{evMin(e)}</span>
+                  <span className="max-w-[130px] truncate">
+                    {e.player}
+                    {e.detail === "Penalty"
+                      ? " (P)"
+                      : e.detail === "Own Goal"
+                        ? " (OG)"
+                        : ""}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-col items-center gap-0.5 text-center text-xs text-white/75">
           {f.venue && (
             <span className="flex items-center gap-1">
               <MapPin className="h-3 w-3" /> {f.venue}
@@ -396,72 +468,58 @@ function FeaturedMatch({
             {t("brand.event")} · {f.label}
           </span>
         </div>
+
+        {/* Nested live stats — part of the hero, expandable */}
+        {hasDetail && (
+          <div className="mt-5 overflow-hidden rounded-lg bg-black/15">
+            <button
+              type="button"
+              onClick={() => setStatsOpen((o) => !o)}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-white"
+            >
+              <BarChart3 className="h-4 w-4" /> {t("stats.title")}
+              <span className="ml-auto text-base text-white/70">
+                {statsOpen ? "−" : "+"}
+              </span>
+            </button>
+            {statsOpen && (
+              <div className="space-y-2 px-4 pb-3">
+                {!stats ? (
+                  <div className="h-16 animate-pulse rounded bg-white/10" />
+                ) : stats.length === 0 ? (
+                  <p className="py-2 text-center text-sm text-white/70">
+                    {t("stats.none")}
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-white/70">
+                      <span className="truncate">{statHome}</span>
+                      <span className="truncate text-right">{statAway}</span>
+                    </div>
+                    {stats.map((srow) => (
+                      <div
+                        key={srow.label}
+                        className="flex items-center justify-between gap-2 border-b border-white/10 py-1.5 text-sm last:border-0"
+                      >
+                        <span className="w-12 font-bold tabular-nums">
+                          {srow.home}
+                        </span>
+                        <span className="flex-1 text-center text-[11px] uppercase tracking-wide text-white/70">
+                          {t(STAT_LABEL_KEY[srow.label] ?? "") || srow.label}
+                        </span>
+                        <span className="w-12 text-right font-bold tabular-nums">
+                          {srow.away}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  );
-}
-
-function LiveStats({ match }: { match: LiveMatch }) {
-  const { t } = useT();
-  const [open, setOpen] = useState(false);
-  const [stats, setStats] = useState<TeamStat[] | null>(null);
-
-  useEffect(() => {
-    if (!open || stats) return;
-    fetchStats(match.fixtureId).then(setStats);
-  }, [open, stats, match.fixtureId]);
-
-  const homeName = match.homeId
-    ? getTeam(match.homeId)?.name ?? match.homeName
-    : match.homeName;
-  const awayName = match.awayId
-    ? getTeam(match.awayId)?.name ?? match.awayName
-    : match.awayName;
-
-  return (
-    <Card className="overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-5 py-3 text-left text-sm font-bold"
-      >
-        <BarChart3 className="h-4 w-4 text-primary" /> {t("stats.title")}
-        <span className="ml-auto text-base text-muted-foreground">
-          {open ? "−" : "+"}
-        </span>
-      </button>
-      {open && (
-        <CardContent className="space-y-2 pt-0">
-          {!stats ? (
-            <div className="h-16 animate-pulse rounded bg-muted" />
-          ) : stats.length === 0 ? (
-            <p className="py-3 text-center text-sm text-muted-foreground">
-              {t("stats.none")}
-            </p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                <span className="truncate">{homeName}</span>
-                <span className="truncate text-right">{awayName}</span>
-              </div>
-              {stats.map((srow) => (
-                <div
-                  key={srow.label}
-                  className="flex items-center justify-between gap-2 border-b py-1.5 text-sm last:border-0"
-                >
-                  <span className="w-12 font-bold tabular-nums">{srow.home}</span>
-                  <span className="flex-1 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {t(STAT_LABEL_KEY[srow.label] ?? "") || srow.label}
-                  </span>
-                  <span className="w-12 text-right font-bold tabular-nums">
-                    {srow.away}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-        </CardContent>
-      )}
-    </Card>
   );
 }
 

@@ -214,3 +214,61 @@ export async function fetchStats(fixtureId: number): Promise<TeamStat[]> {
     return [];
   }
 }
+
+// Live status short code → i18n key for the period label ("1st half", etc.).
+export const LIVE_PERIOD_KEY: Record<string, string> = {
+  "1H": "live.firstHalf",
+  "2H": "live.secondHalf",
+  HT: "live.halftime",
+  ET: "live.extraTime",
+  BT: "live.break",
+  P: "live.penalties",
+  LIVE: "today.live",
+  INT: "live.paused",
+};
+// Statuses where showing the running minute makes sense.
+export const SHOW_MINUTE = new Set(["1H", "2H", "ET", "LIVE"]);
+
+export interface MatchEvent {
+  minute: number | null;
+  extra: number | null;
+  teamName: string;
+  player: string;
+  assist: string | null;
+  type: string; // "Goal", "Card", "subst", "Var"
+  detail: string; // "Normal Goal", "Penalty", "Own Goal", "Yellow Card"…
+}
+
+interface AfEvent {
+  time?: { elapsed?: number | null; extra?: number | null };
+  team?: { name?: string };
+  player?: { name?: string };
+  assist?: { name?: string | null };
+  type?: string;
+  detail?: string;
+}
+
+/** Match events (goals, cards…) for a fixture — newest first. */
+export async function fetchEvents(fixtureId: number): Promise<MatchEvent[]> {
+  if (!BASE || !fixtureId) return [];
+  try {
+    const res = await fetch(
+      `${BASE.replace(/\/$/, "")}/events?fixture=${fixtureId}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as { response?: AfEvent[] };
+    if (hasApiError(json)) return [];
+    return (json.response ?? []).map((e) => ({
+      minute: e.time?.elapsed ?? null,
+      extra: e.time?.extra ?? null,
+      teamName: e.team?.name ?? "",
+      player: e.player?.name ?? "",
+      assist: e.assist?.name ?? null,
+      type: e.type ?? "",
+      detail: e.detail ?? "",
+    }));
+  } catch {
+    return [];
+  }
+}

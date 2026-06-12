@@ -103,6 +103,23 @@ export function participantGoals(p: Participant, state: PoolState): number {
   );
 }
 
+/**
+ * Assign competition ranks (1,1,3,…) to an already points-sorted list, so tied
+ * players share the same rank.
+ */
+export function rankStandings(
+  list: ParticipantStanding[],
+): { s: ParticipantStanding; rank: number }[] {
+  let lastPts: number | null = null;
+  let lastRank = 0;
+  return list.map((s, i) => {
+    const rank = lastPts !== null && s.totalPoints === lastPts ? lastRank : i + 1;
+    lastPts = s.totalPoints;
+    lastRank = rank;
+    return { s, rank };
+  });
+}
+
 /** Team ids owned by a participant — works in every distribution mode. */
 export function ownedTeamIds(p: Participant, state: PoolState): string[] {
   if (state.settings.distributionMode === "individual") {
