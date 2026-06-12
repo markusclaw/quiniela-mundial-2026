@@ -330,6 +330,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             next.groupDraws !== cur.groupDraws ||
             next.groupLosses !== cur.groupLosses ||
             (next.goalsFor ?? 0) !== (cur.goalsFor ?? 0) ||
+            (next.groupGoalsFor ?? 0) !== (cur.groupGoalsFor ?? 0) ||
+            (next.groupGoalsAgainst ?? 0) !== (cur.groupGoalsAgainst ?? 0) ||
             next.stageReached !== cur.stageReached
           ) {
             results[teamId] = next;

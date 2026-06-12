@@ -53,6 +53,8 @@ function freshResults(): Record<string, TeamResult> {
       groupDraws: 0,
       groupLosses: 0,
       goalsFor: 0,
+      groupGoalsFor: 0,
+      groupGoalsAgainst: 0,
       stageReached: "group",
     };
   }

@@ -290,11 +290,14 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
   // Only return fields the sync should set.
   const results: Record<string, Partial<TeamResult>> = {};
   for (const [id, t] of Object.entries(out)) {
+    const gg = goals[id] ?? { gf: 0, ga: 0 };
     results[id] = {
       groupWins: t.groupWins,
       groupDraws: t.groupDraws,
       groupLosses: t.groupLosses,
       goalsFor: t.goalsFor ?? 0,
+      groupGoalsFor: gg.gf,
+      groupGoalsAgainst: gg.ga,
       stageReached: t.stageReached,
     };
   }

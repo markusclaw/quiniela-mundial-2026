@@ -42,7 +42,9 @@ export interface TeamResult {
   groupWins: number;
   groupDraws: number;
   groupLosses: number;
-  goalsFor?: number; // total goals the team has scored (all stages)
+  goalsFor?: number; // total goals the team has scored (all stages) — for the metric
+  groupGoalsFor?: number; // group-stage goals for (standings table)
+  groupGoalsAgainst?: number; // group-stage goals against (standings table)
   stageReached: Stage; // furthest stage reached / eliminated
   manual?: boolean; // true = moderator-edited; auto-sync won't overwrite it
 }
