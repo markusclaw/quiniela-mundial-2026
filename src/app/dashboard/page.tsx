@@ -80,7 +80,7 @@ function DashboardInner() {
                 <RankBadge rank={i + 1} active={s.totalPoints > 0} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{s.participant.name}</div>
-                  <div className="mt-1 flex items-center gap-1.5">
+                  <div className="mt-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                     {teams.map((tid) => {
                       const out = state.results[tid]?.stageReached === "eliminated";
                       return (

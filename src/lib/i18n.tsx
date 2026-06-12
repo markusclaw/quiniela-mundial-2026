@@ -75,6 +75,9 @@ const EN: Dict = {
   "admin.login.title": "Organizer access",
   "admin.login.prompt": "Enter the organizer PIN to manage the pool.",
   "pkg.unassigned": "Unassigned",
+  "pkg.paid": "Paid",
+  "pkg.partial": "Partial",
+  "pkg.pending": "Unpaid",
   "fx.calUnavailable": "Schedule unavailable right now.",
 
   // landing
@@ -368,6 +371,9 @@ const ES: Dict = {
   "admin.login.title": "Acceso de organizador",
   "admin.login.prompt": "Ingresa el PIN del organizador para gestionar la quiniela.",
   "pkg.unassigned": "Sin asignar",
+  "pkg.paid": "Pagado",
+  "pkg.partial": "Parcial",
+  "pkg.pending": "Pendiente",
   "fx.calUnavailable": "Calendario no disponible por ahora.",
 
   "landing.badge": "Quiniela privada · 48 equipos",

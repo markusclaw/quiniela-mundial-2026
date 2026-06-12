@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { formatMoney } from "@/lib/utils";
 import { getTeam, TEAMS } from "@/lib/data/teams";
-import type { Package } from "@/lib/types";
+import type { Package, Participant } from "@/lib/types";
 
 function PotBadge({ teamId }: { teamId: string }) {
   const { t } = useT();
@@ -22,15 +22,38 @@ function PotBadge({ teamId }: { teamId: string }) {
   );
 }
 
+// Paid / partially paid / pending — shown on each pack.
+function PaidBadge({
+  paid,
+  owed,
+  currency,
+}: {
+  paid: number;
+  owed: number;
+  currency: string;
+}) {
+  const { t } = useT();
+  if (owed <= 0) return null;
+  if (paid >= owed) return <Badge variant="default">{t("pkg.paid")}</Badge>;
+  if (paid > 0)
+    return (
+      <Badge variant="gold">
+        {t("pkg.partial")} · {formatMoney(paid, currency)}/
+        {formatMoney(owed, currency)}
+      </Badge>
+    );
+  return <Badge variant="muted">{t("pkg.pending")}</Badge>;
+}
+
 function DrawInner() {
   const { state } = usePool();
   const { t } = useT();
 
   if (state.settings.distributionMode === "individual") return <TeamsView />;
 
-  const ownerByPkg: Record<string, string> = {};
+  const ownerByPkg: Record<string, Participant> = {};
   for (const p of state.participants) {
-    if (p.packageId) ownerByPkg[p.packageId] = p.name;
+    if (p.packageId) ownerByPkg[p.packageId] = p;
   }
 
   return (
@@ -65,7 +88,7 @@ function PackageCard({
   currency,
 }: {
   pkg: Package;
-  owner?: string;
+  owner?: Participant;
   currency: string;
 }) {
   const { t } = useT();
@@ -99,8 +122,15 @@ function PackageCard({
 
         <div className="pt-2">
           {owner ? (
-            <div className="flex items-center justify-center gap-2 rounded-md bg-primary/10 py-2 text-sm font-semibold text-primary">
-              <User className="h-3.5 w-3.5" /> {owner}
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="flex w-full items-center justify-center gap-2 rounded-md bg-primary/10 py-2 text-sm font-semibold text-primary">
+                <User className="h-3.5 w-3.5" /> {owner.name}
+              </div>
+              <PaidBadge
+                paid={owner.paid ? pkg.buyIn : 0}
+                owed={pkg.buyIn}
+                currency={currency}
+              />
             </div>
           ) : (
             <div className="flex items-center justify-center gap-2 rounded-md bg-muted py-2 text-sm text-muted-foreground">
@@ -151,22 +181,31 @@ function TeamsView() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {byParticipant.map(({ participant, teamIds }) => (
+        {byParticipant.map(({ participant, teamIds }) => {
+          const owed = teamIds.length * teamPrice;
+          const paidSet = new Set(participant.paidTeams ?? []);
+          const paid = teamIds.filter((tid) => paidSet.has(tid)).length * teamPrice;
+          return (
           <Card key={participant.id} className="overflow-hidden">
             <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2 text-base font-bold">
-                  <User className="h-4 w-4 text-primary" />
-                  {t("draw.personPack", { name: participant.name })}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 text-base font-bold">
+                  <User className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="truncate">
+                    {t("draw.personPack", { name: participant.name })}
+                  </span>
                 </div>
-                <div className="text-right">
+                <div className="shrink-0 text-right">
                   <div className="text-lg font-extrabold tracking-tight">
-                    {formatMoney(teamIds.length * teamPrice, currency)}
+                    {formatMoney(owed, currency)}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     {teamIds.length} {t("admin.people.teamsCount")}
                   </div>
                 </div>
+              </div>
+              <div className="mt-1.5">
+                <PaidBadge paid={paid} owed={owed} currency={currency} />
               </div>
             </CardHeader>
             <CardContent className="space-y-2.5">
@@ -178,7 +217,8 @@ function TeamsView() {
               ))}
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {unassigned.length > 0 && unassigned.length < 48 && (

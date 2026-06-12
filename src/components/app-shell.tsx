@@ -35,15 +35,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
         <div className="container flex h-16 items-center justify-between gap-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
               <Trophy className="h-5 w-5" />
             </span>
-            <div className="leading-tight">
-              <div className="text-sm font-bold tracking-tight">
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-bold tracking-tight">
                 {state.settings.name}
               </div>
-              <div className="text-[11px] text-muted-foreground">
+              <div className="truncate text-[11px] text-muted-foreground">
                 {t("brand.event")}
               </div>
             </div>
@@ -61,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <SyncIndicator className="hidden sm:inline-flex" />
             <LangToggle />
             {me?.isModerator && (
@@ -158,12 +158,12 @@ function BottomLink({
     <Link
       href={href}
       className={cn(
-        "flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors",
+        "flex min-w-0 flex-col items-center gap-1 px-1 py-2.5 text-[11px] font-medium transition-colors",
         active ? "text-primary" : "text-muted-foreground",
       )}
     >
-      <Icon className="h-5 w-5" />
-      {label}
+      <Icon className="h-5 w-5 shrink-0" />
+      <span className="w-full truncate text-center">{label}</span>
     </Link>
   );
 }

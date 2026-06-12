@@ -235,6 +235,9 @@ function MatchHubRow({
 }) {
   const { state } = usePool();
   const [open, setOpen] = useState(false);
+  const owners = ownerMap(state);
+  const homeOwner = f.home.id ? owners[f.home.id] : undefined;
+  const awayOwner = f.away.id ? owners[f.away.id] : undefined;
 
   const time =
     f.kickoff != null
@@ -262,7 +265,7 @@ function MatchHubRow({
           expandable && "hover:bg-secondary/40",
         )}
       >
-        <div className="w-16 shrink-0 text-center">
+        <div className="w-12 shrink-0 text-center">
           {isLive ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-primary">
               <span className="relative flex h-1.5 w-1.5">
@@ -279,35 +282,18 @@ function MatchHubRow({
             <span className="text-xs font-semibold text-muted-foreground">{time}</span>
           )}
         </div>
-        <div className="flex flex-1 items-center justify-end gap-2 text-right">
-          <span className="truncate text-sm font-medium">{teamName(f.home)}</span>
-          {f.home.id && <TeamCrest teamId={f.home.id} size="sm" />}
+        {/* Teams stacked vertically — reads cleanly on mobile. */}
+        <div className="min-w-0 flex-1 space-y-1">
+          <HubTeamLine side={f.home} owner={homeOwner} goal={score ? score[0] : null} />
+          <HubTeamLine side={f.away} owner={awayOwner} goal={score ? score[1] : null} />
         </div>
-        <div className="w-12 shrink-0 text-center">
-          {score ? (
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {score[0]}-{score[1]}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">vs</span>
-          )}
-        </div>
-        <div className="flex flex-1 items-center gap-2">
-          {f.away.id && <TeamCrest teamId={f.away.id} size="sm" />}
-          <span className="truncate text-sm font-medium">{teamName(f.away)}</span>
-        </div>
-        <div className="hidden w-44 shrink-0 items-center justify-end gap-2 text-right text-[11px] text-muted-foreground sm:flex">
+        <div className="hidden shrink-0 items-center gap-2 text-[11px] text-muted-foreground sm:flex">
           <Badge variant="muted">{f.label}</Badge>
-          {expandable && (
-            <ChevronDown
-              className={cn("h-4 w-4 transition-transform", open && "rotate-180")}
-            />
-          )}
         </div>
         {expandable && (
           <ChevronDown
             className={cn(
-              "h-4 w-4 shrink-0 text-muted-foreground transition-transform sm:hidden",
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
               open && "rotate-180",
             )}
           />
@@ -322,6 +308,43 @@ function MatchHubRow({
           loc={loc}
           t={t}
         />
+      )}
+    </div>
+  );
+}
+
+function HubTeamLine({
+  side,
+  owner,
+  goal,
+}: {
+  side: { id: string | null; name: string };
+  owner?: string;
+  goal: number | null;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {side.id ? (
+        <TeamCrest teamId={side.id} size="sm" />
+      ) : (
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-muted text-xs">
+          ?
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium leading-tight">
+          {teamName(side)}
+        </span>
+        {owner && (
+          <span className="block truncate text-[10px] text-muted-foreground">
+            {owner}
+          </span>
+        )}
+      </span>
+      {goal != null && (
+        <span className="shrink-0 text-base font-extrabold tabular-nums">
+          {goal}
+        </span>
       )}
     </div>
   );
@@ -431,6 +454,7 @@ function GroupCard({ group }: { group: GroupId }) {
   const { state } = usePool();
   const { t } = useT();
   const teams = teamsByGroup(group);
+  const owners = ownerMap(state);
 
   return (
     <Card className="overflow-hidden">
@@ -451,12 +475,19 @@ function GroupCard({ group }: { group: GroupId }) {
               key={tm.id}
               className={cn("flex items-center gap-2.5 px-3 py-2", out && "opacity-50")}
             >
-              <span className="w-3 text-center text-[11px] font-semibold text-muted-foreground">
+              <span className="w-3 shrink-0 text-center text-[11px] font-semibold text-muted-foreground">
                 {i + 1}
               </span>
               <TeamCrest teamId={tm.id} size="md" />
-              <span className="flex-1 truncate text-sm font-medium">{tm.name}</span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{tm.name}</span>
+                {owners[tm.id] && (
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {owners[tm.id]}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
                 {r.groupWins}-{r.groupDraws}-{r.groupLosses}
               </span>
             </div>
