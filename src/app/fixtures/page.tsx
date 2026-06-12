@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays, MapPin, ChevronDown, User, BarChart3 } from "lucide-react";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -10,23 +10,102 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { GROUP_IDS, teamsByGroup, getTeam } from "@/lib/data/teams";
+import { ownerMap, teamPoints } from "@/lib/scoring";
 import { fetchFixtures, type FixtureLite } from "@/lib/results-sync";
-import type { GroupId } from "@/lib/types";
+import {
+  fetchLive,
+  fetchStats,
+  findLiveFor,
+  isLiveEnabled,
+  type LiveMatch,
+  type TeamStat,
+} from "@/lib/live";
+import type { GroupId, PoolState } from "@/lib/types";
+
+type Tab = "upcoming" | "results" | "groups";
+
+const STAT_LABEL_KEY: Record<string, string> = {
+  "Ball Possession": "stat.possession",
+  "Total Shots": "stat.shots",
+  "Shots on Goal": "stat.shotsOn",
+  "Corner Kicks": "stat.corners",
+  Fouls: "stat.fouls",
+  "Yellow Cards": "stat.yellow",
+};
 
 function teamName(side: { id: string | null; name: string }) {
   return side.id ? getTeam(side.id)?.name ?? side.name : side.name;
 }
 
+function phaseOf(
+  f: FixtureLite,
+  live: LiveMatch[],
+  now: number,
+): "live" | "upcoming" | "done" {
+  const lm = findLiveFor(live, f.home.id, f.away.id);
+  if (lm?.inPlay) return "live";
+  if (lm?.finished || f.played || f.score) return "done";
+  if (f.kickoff != null && f.kickoff <= now) {
+    const since = now - f.kickoff;
+    const win = (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
+    return since <= win ? "live" : "done";
+  }
+  return "upcoming";
+}
+
 function FixturesInner() {
   const { t } = useT();
-  const [tab, setTab] = useState<"groups" | "schedule">("groups");
+  const [tab, setTab] = useState<Tab>("upcoming");
+  const [fixtures, setFixtures] = useState<FixtureLite[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [live, setLive] = useState<LiveMatch[]>([]);
+
+  useEffect(() => {
+    let on = true;
+    fetchFixtures().then((f) => {
+      if (!on) return;
+      setFixtures(f);
+      setLoading(false);
+    });
+    return () => {
+      on = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isLiveEnabled) return;
+    let on = true;
+    const load = () => fetchLive().then((l) => on && l && setLive(l));
+    load();
+    const id = setInterval(load, 30 * 1000);
+    return () => {
+      on = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  const now = Date.now();
+  const upcoming = useMemo(
+    () =>
+      (fixtures ?? [])
+        .filter((f) => phaseOf(f, live, now) !== "done")
+        .sort((a, b) => (a.kickoff ?? Infinity) - (b.kickoff ?? Infinity)),
+    [fixtures, live, now],
+  );
+  const results = useMemo(
+    () =>
+      (fixtures ?? [])
+        .filter((f) => phaseOf(f, live, now) === "done")
+        .sort((a, b) => (b.kickoff ?? 0) - (a.kickoff ?? 0)),
+    [fixtures, live, now],
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">{t("fx.title")}</h1>
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm">
-          {(["groups", "schedule"] as const).map((tb) => (
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1 text-sm">
+          {(["upcoming", "results", "groups"] as const).map((tb) => (
             <button
               key={tb}
               onClick={() => setTab(tb)}
@@ -47,8 +126,302 @@ function FixturesInner() {
             <GroupCard key={g} group={g} />
           ))}
         </div>
+      ) : loading ? (
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-12 animate-pulse rounded bg-muted" />
+            ))}
+          </CardContent>
+        </Card>
+      ) : !fixtures ? (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">
+            {t("fx.calUnavailable")}
+          </CardContent>
+        </Card>
       ) : (
-        <CalendarView />
+        <MatchList
+          matches={tab === "upcoming" ? upcoming : results}
+          live={live}
+          recentFirst={tab === "results"}
+          emptyKey={tab === "upcoming" ? "fx.noUpcoming" : "fx.noResults"}
+        />
+      )}
+    </div>
+  );
+}
+
+function MatchList({
+  matches,
+  live,
+  recentFirst,
+  emptyKey,
+}: {
+  matches: FixtureLite[];
+  live: LiveMatch[];
+  recentFirst: boolean;
+  emptyKey: string;
+}) {
+  const { t, locale } = useT();
+  const loc = locale === "es" ? "es-MX" : "en-US";
+
+  const byDate = useMemo(() => {
+    const order: string[] = [];
+    const groups: Record<string, FixtureLite[]> = {};
+    for (const f of matches) {
+      if (!groups[f.date]) {
+        groups[f.date] = [];
+        order.push(f.date);
+      }
+      groups[f.date].push(f);
+    }
+    order.sort((a, b) => (recentFirst ? b.localeCompare(a) : a.localeCompare(b)));
+    return order.map((date) => ({ date, matches: groups[date] }));
+  }, [matches, recentFirst]);
+
+  if (!matches.length) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-sm text-muted-foreground">
+          {t(emptyKey)}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {byDate.map(({ date, matches: ms }) => {
+        const label = new Date(`${date}T12:00:00`).toLocaleDateString(loc, {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        });
+        return (
+          <Card key={date} className="overflow-hidden">
+            <div className="flex items-center gap-2 border-b bg-secondary/60 px-4 py-2.5">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              <span className="text-sm font-bold capitalize">{label}</span>
+            </div>
+            <div className="divide-y">
+              {ms.map((f, i) => (
+                <MatchHubRow
+                  key={i}
+                  f={f}
+                  live={findLiveFor(live, f.home.id, f.away.id)}
+                  loc={loc}
+                  t={t}
+                />
+              ))}
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function MatchHubRow({
+  f,
+  live,
+  loc,
+  t,
+}: {
+  f: FixtureLite;
+  live: LiveMatch | null;
+  loc: string;
+  t: (k: string, p?: Record<string, string | number>) => string;
+}) {
+  const { state } = usePool();
+  const [open, setOpen] = useState(false);
+
+  const time =
+    f.kickoff != null
+      ? new Date(f.kickoff).toLocaleTimeString(loc, {
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "";
+  const sameOrient = live ? live.homeId === f.home.id : true;
+  const apiHome = live ? (sameOrient ? live.homeGoals : live.awayGoals) : 0;
+  const apiAway = live ? (sameOrient ? live.awayGoals : live.homeGoals) : 0;
+  const showApi = !!live && (live.inPlay || live.finished);
+  const score: [number, number] | null = showApi ? [apiHome, apiAway] : f.score ?? null;
+  const isLive = !!live && live.inPlay;
+  const isDone = (!!live && live.finished) || f.played || !!f.score;
+  const expandable = isLive || isDone;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => expandable && setOpen((o) => !o)}
+        className={cn(
+          "flex w-full items-center gap-3 px-4 py-2.5 text-left",
+          expandable && "hover:bg-secondary/40",
+        )}
+      >
+        <div className="w-16 shrink-0 text-center">
+          {isLive ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-primary">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/70" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+              </span>
+              {live!.minute != null ? `${live!.minute}'` : t("today.live")}
+            </span>
+          ) : isDone ? (
+            <span className="text-[10px] font-bold uppercase text-muted-foreground">
+              {t("today.ft")}
+            </span>
+          ) : (
+            <span className="text-xs font-semibold text-muted-foreground">{time}</span>
+          )}
+        </div>
+        <div className="flex flex-1 items-center justify-end gap-2 text-right">
+          <span className="truncate text-sm font-medium">{teamName(f.home)}</span>
+          {f.home.id && <TeamCrest teamId={f.home.id} size="sm" />}
+        </div>
+        <div className="w-12 shrink-0 text-center">
+          {score ? (
+            <span className="font-mono text-sm font-bold tabular-nums">
+              {score[0]}-{score[1]}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">vs</span>
+          )}
+        </div>
+        <div className="flex flex-1 items-center gap-2">
+          {f.away.id && <TeamCrest teamId={f.away.id} size="sm" />}
+          <span className="truncate text-sm font-medium">{teamName(f.away)}</span>
+        </div>
+        <div className="hidden w-44 shrink-0 items-center justify-end gap-2 text-right text-[11px] text-muted-foreground sm:flex">
+          <Badge variant="muted">{f.label}</Badge>
+          {expandable && (
+            <ChevronDown
+              className={cn("h-4 w-4 transition-transform", open && "rotate-180")}
+            />
+          )}
+        </div>
+        {expandable && (
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform sm:hidden",
+              open && "rotate-180",
+            )}
+          />
+        )}
+      </button>
+
+      {open && (
+        <MatchDetail
+          f={f}
+          live={live}
+          state={state}
+          loc={loc}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+function MatchDetail({
+  f,
+  live,
+  state,
+  loc,
+  t,
+}: {
+  f: FixtureLite;
+  live: LiveMatch | null;
+  state: PoolState;
+  loc: string;
+  t: (k: string, p?: Record<string, string | number>) => string;
+}) {
+  const owners = ownerMap(state);
+  const fixtureId = live?.fixtureId ?? 0;
+  const showStats = fixtureId > 0 && (live?.inPlay || live?.finished);
+
+  const TeamLine = ({ side }: { side: { id: string | null; name: string } }) => {
+    const owner = side.id ? owners[side.id] : undefined;
+    const r = side.id ? state.results[side.id] : undefined;
+    const pts = r ? teamPoints(r, state.scoring).total : 0;
+    return (
+      <div className="flex items-center gap-2 py-1.5">
+        {side.id && <TeamCrest teamId={side.id} size="sm" />}
+        <span className="flex-1 truncate text-sm font-medium">{teamName(side)}</span>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <User className="h-3 w-3" />
+          {owner ?? t("today.noOwner")}
+        </span>
+        <span className="w-14 text-right text-xs font-bold tabular-nums">
+          {pts} {t("fx.pts")}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3 border-t bg-secondary/30 px-4 py-3">
+      <div className="divide-y rounded-lg border bg-card px-3">
+        <TeamLine side={f.home} />
+        <TeamLine side={f.away} />
+      </div>
+      {f.venue && (
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <MapPin className="h-3 w-3" /> {f.venue}
+        </div>
+      )}
+      {showStats && <StatsPanel fixtureId={fixtureId} t={t} loc={loc} />}
+    </div>
+  );
+}
+
+function StatsPanel({
+  fixtureId,
+  t,
+}: {
+  fixtureId: number;
+  t: (k: string, p?: Record<string, string | number>) => string;
+  loc: string;
+}) {
+  const [stats, setStats] = useState<TeamStat[] | null>(null);
+  useEffect(() => {
+    let on = true;
+    fetchStats(fixtureId).then((s) => on && setStats(s));
+    return () => {
+      on = false;
+    };
+  }, [fixtureId]);
+
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-bold">
+        <BarChart3 className="h-3.5 w-3.5 text-primary" /> {t("stats.title")}
+      </div>
+      {!stats ? (
+        <div className="h-12 animate-pulse rounded bg-muted" />
+      ) : stats.length === 0 ? (
+        <p className="py-2 text-center text-xs text-muted-foreground">
+          {t("stats.none")}
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {stats.map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
+              <span className="w-12 font-bold tabular-nums">{s.home}</span>
+              <span className="flex-1 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+                {t(STAT_LABEL_KEY[s.label] ?? "") || s.label}
+              </span>
+              <span className="w-12 text-right font-bold tabular-nums">{s.away}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -91,135 +464,6 @@ function GroupCard({ group }: { group: GroupId }) {
         })}
       </div>
     </Card>
-  );
-}
-
-function CalendarView() {
-  const { t, locale } = useT();
-  const loc = locale === "es" ? "es-MX" : "en-US";
-  const [fixtures, setFixtures] = useState<FixtureLite[] | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let on = true;
-    fetchFixtures().then((f) => {
-      if (!on) return;
-      setFixtures(f);
-      setLoading(false);
-    });
-    return () => {
-      on = false;
-    };
-  }, []);
-
-  const byDate = useMemo(() => {
-    const groups: { date: string; matches: FixtureLite[] }[] = [];
-    for (const f of fixtures ?? []) {
-      const last = groups[groups.length - 1];
-      if (last && last.date === f.date) last.matches.push(f);
-      else groups.push({ date: f.date, matches: [f] });
-    }
-    return groups;
-  }, [fixtures]);
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded bg-muted" />
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-  if (!fixtures) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center text-sm text-muted-foreground">
-          {t("fx.calUnavailable")}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {byDate.map(({ date, matches }) => {
-        const label = new Date(`${date}T12:00:00`).toLocaleDateString(loc, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        });
-        return (
-          <Card key={date} className="overflow-hidden">
-            <div className="flex items-center gap-2 border-b bg-secondary/60 px-4 py-2.5">
-              <CalendarDays className="h-4 w-4 text-primary" />
-              <span className="text-sm font-bold capitalize">{label}</span>
-            </div>
-            <div className="divide-y">
-              {matches.map((f, i) => (
-                <MatchRow key={i} f={f} loc={loc} t={t} />
-              ))}
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-function MatchRow({
-  f,
-  loc,
-  t,
-}: {
-  f: FixtureLite;
-  loc: string;
-  t: (k: string, p?: Record<string, string | number>) => string;
-}) {
-  const time =
-    f.kickoff != null
-      ? new Date(f.kickoff).toLocaleTimeString(loc, {
-          hour: "numeric",
-          minute: "2-digit",
-        })
-      : "";
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5">
-      <div className="w-16 shrink-0 text-center">
-        {f.played ? (
-          <span className="text-[10px] font-bold uppercase text-muted-foreground">
-            {t("today.ft")}
-          </span>
-        ) : (
-          <span className="text-xs font-semibold text-muted-foreground">{time}</span>
-        )}
-      </div>
-      <div className="flex flex-1 items-center justify-end gap-2 text-right">
-        <span className="truncate text-sm font-medium">{teamName(f.home)}</span>
-        {f.home.id && <TeamCrest teamId={f.home.id} size="sm" />}
-      </div>
-      <div className="w-12 shrink-0 text-center">
-        {f.score ? (
-          <span className="font-mono text-sm font-bold tabular-nums">
-            {f.score[0]}-{f.score[1]}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">vs</span>
-        )}
-      </div>
-      <div className="flex flex-1 items-center gap-2">
-        {f.away.id && <TeamCrest teamId={f.away.id} size="sm" />}
-        <span className="truncate text-sm font-medium">{teamName(f.away)}</span>
-      </div>
-      <div className="hidden w-40 shrink-0 text-right text-[11px] text-muted-foreground sm:block">
-        <div className="flex items-center justify-end gap-1">
-          <MapPin className="h-3 w-3" /> <span className="truncate">{f.venue}</span>
-        </div>
-        <Badge variant="muted" className="mt-0.5">{f.label}</Badge>
-      </div>
-    </div>
   );
 }
 

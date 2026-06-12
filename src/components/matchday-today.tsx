@@ -112,7 +112,7 @@ export function MatchdayToday() {
   // upcoming kickoff does. The "up next" list shows the matches that come
   // AFTER the hero (across days), so a finished game never sits up top.
   // Today's finished results get their own compact strip below.
-  const { hero, rest, results, heroToday } = useMemo(() => {
+  const { hero, rest, heroToday } = useMemo(() => {
     const empty = {
       hero: null as FixtureLite | null,
       rest: [] as FixtureLite[],
@@ -144,7 +144,8 @@ export function MatchdayToday() {
     const restUpcoming = upcoming.filter((f) => f !== h);
     return {
       hero: h,
-      rest: [...restLive, ...restUpcoming].slice(0, 6),
+      // Keep the home screen focused: just the next 5 upcoming/live matches.
+      rest: [...restLive, ...restUpcoming].slice(0, 5),
       results: finishedToday.filter((f) => f !== h),
       heroToday: h.date === today,
     };
@@ -181,17 +182,6 @@ export function MatchdayToday() {
           title={t("today.upNext")}
           icon={<CalendarDays className="h-4 w-4 text-primary" />}
           matches={rest}
-          live={live}
-          owners={owners}
-          loc={loc}
-          t={t}
-        />
-      )}
-      {results.length > 0 && (
-        <MiniCardRow
-          title={t("today.results")}
-          icon={<CalendarDays className="h-4 w-4 text-muted-foreground" />}
-          matches={results}
           live={live}
           owners={owners}
           loc={loc}
