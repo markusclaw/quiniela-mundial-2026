@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CalendarDays, MapPin, User, BarChart3, Target } from "lucide-react";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -74,6 +74,14 @@ function phaseOf(
   return "upcoming";
 }
 
+// Stable key for a fixture (used to remember when a match finished).
+function fxKey(f: FixtureLite): string {
+  return `${f.date}|${f.home.name}|${f.away.name}`;
+}
+
+// Keep a just-finished match featured for this long so people can read it.
+const FINISHED_GRACE_MS = 15 * 60 * 1000;
+
 export function MatchdayToday() {
   const { state } = usePool();
   const { t, locale } = useT();
@@ -111,6 +119,28 @@ export function MatchdayToday() {
     };
   }, []);
 
+  // Remember which matches we watched go live, and when each finished — so a
+  // just-ended match can stay featured for a grace window (and stale matches
+  // from before this session don't resurface).
+  const seenLiveRef = useRef<Set<string>>(new Set());
+  const finishedAtRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!fixtures) return;
+    const now = Date.now();
+    for (const f of fixtures) {
+      const key = fxKey(f);
+      const phase = phaseOf(f, live, now);
+      if (phase === "live") seenLiveRef.current.add(key);
+      else if (
+        phase === "done" &&
+        seenLiveRef.current.has(key) &&
+        !finishedAtRef.current[key]
+      ) {
+        finishedAtRef.current[key] = now;
+      }
+    }
+  }, [fixtures, live]);
+
   const owners = useMemo(() => ownerMap(state), [state]);
 
   // Build a forward-looking feed: a live match headlines; otherwise the next
@@ -138,9 +168,24 @@ export function MatchdayToday() {
       .filter((f) => phaseOf(f, live, now) === "done" && f.date === today)
       .sort((a, b) => (b.kickoff ?? 0) - (a.kickoff ?? 0));
 
+    // Matches that finished within the grace window (most recent first) — kept
+    // featured so people can read the result before the hero moves on.
+    const recentlyFinished = fixtures
+      .filter((f) => {
+        if (phaseOf(f, live, now) !== "done") return false;
+        const at = finishedAtRef.current[fxKey(f)];
+        return !!at && now - at < FINISHED_GRACE_MS;
+      })
+      .sort(
+        (a, b) =>
+          (finishedAtRef.current[fxKey(b)] ?? 0) -
+          (finishedAtRef.current[fxKey(a)] ?? 0),
+      );
+
     let h: FixtureLite | null = null;
     if (liveOnes.length)
       h = [...liveOnes].sort((a, b) => prominence(b) - prominence(a))[0];
+    else if (recentlyFinished.length) h = recentlyFinished[0];
     else if (upcoming.length) h = upcoming[0];
     else h = finishedToday[0] ?? null;
     if (!h) return empty;
