@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, MapPin, Radio, User, BarChart3, Target } from "lucide-react";
+import { CalendarDays, MapPin, User, BarChart3, Target } from "lucide-react";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { getTeam, teamColor } from "@/lib/data/teams";
 import { ownerMap } from "@/lib/scoring";
 import { SilkBackground } from "@/components/ui/silk-background";
@@ -378,16 +377,20 @@ function FeaturedMatch({
       <div className="relative z-10 p-5 sm:p-7">
         <div className="mb-5 flex flex-col items-center gap-1.5 text-center">
           {showLive ? (
-            <Badge variant="gold" className="gap-1">
-              <Radio className="h-3 w-3" /> {t(periodKey)}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-foreground shadow-md">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+              {t(periodKey)}
               {showMin ? ` ${live!.minute}'` : ""}
-            </Badge>
+            </span>
           ) : showFinal || f.played || pending ? (
-            <Badge variant="gold" className="gap-1">
-              <Radio className="h-3 w-3" /> {t("today.ft")}
-            </Badge>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-foreground shadow-md">
+              {t("today.ft")}
+            </span>
           ) : (
-            <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold">
+            <span className="rounded-full bg-black/40 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
               {isToday ? t("today.title") : dateLabel}
             </span>
           )}
