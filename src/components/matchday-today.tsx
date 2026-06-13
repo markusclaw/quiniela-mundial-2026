@@ -470,9 +470,19 @@ function FeaturedMatch({
         )}
 
         <div className="mt-4 flex flex-col items-center gap-0.5 text-center text-xs text-white/75">
-          {f.venue && (
+          {(f.stadium || f.venue) && (
             <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" /> {f.venue}
+              <MapPin className="h-3 w-3 shrink-0" />
+              {f.stadium ? (
+                <span>
+                  <span className="font-semibold text-white/90">
+                    {f.stadium}
+                  </span>
+                  {f.venue ? ` · ${f.venue}` : ""}
+                </span>
+              ) : (
+                f.venue
+              )}
             </span>
           )}
           <span className="font-medium">

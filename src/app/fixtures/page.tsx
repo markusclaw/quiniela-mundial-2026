@@ -386,9 +386,17 @@ function MatchDetail({
         <TeamLine side={f.home} />
         <TeamLine side={f.away} />
       </div>
-      {f.venue && (
+      {(f.stadium || f.venue) && (
         <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          <MapPin className="h-3 w-3" /> {f.venue}
+          <MapPin className="h-3 w-3 shrink-0" />
+          {f.stadium ? (
+            <span>
+              <span className="font-medium text-foreground">{f.stadium}</span>
+              {f.venue ? ` · ${f.venue}` : ""}
+            </span>
+          ) : (
+            f.venue
+          )}
         </div>
       )}
       {showStats && <StatsPanel fixtureId={fixtureId} t={t} loc={loc} />}

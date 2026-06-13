@@ -331,12 +331,33 @@ export interface FixtureLite {
   kickoff: number | null; // epoch ms, or null if time unparseable
   label: string; // group ("Group A") or knockout round
   isKnockout: boolean;
-  venue: string;
+  venue: string; // host city/metro (from the feed)
+  stadium: string; // stadium name (mapped from the city)
   home: { id: string | null; name: string };
   away: { id: string | null; name: string };
   score: [number, number] | null;
   played: boolean;
 }
+
+// The feed gives the host city/metro; map each of the 16 venues to its stadium.
+const STADIUM_BY_CITY: Record<string, string> = {
+  "Mexico City": "Estadio Azteca",
+  "Guadalajara (Zapopan)": "Estadio Akron",
+  "Monterrey (Guadalupe)": "Estadio BBVA",
+  Toronto: "BMO Field",
+  Vancouver: "BC Place",
+  Seattle: "Lumen Field",
+  "San Francisco Bay Area (Santa Clara)": "Levi's Stadium",
+  "Los Angeles (Inglewood)": "SoFi Stadium",
+  "New York/New Jersey (East Rutherford)": "MetLife Stadium",
+  "Boston (Foxborough)": "Gillette Stadium",
+  Philadelphia: "Lincoln Financial Field",
+  "Miami (Miami Gardens)": "Hard Rock Stadium",
+  Atlanta: "Mercedes-Benz Stadium",
+  Houston: "NRG Stadium",
+  "Dallas (Arlington)": "AT&T Stadium",
+  "Kansas City": "Arrowhead Stadium",
+};
 
 // Build an epoch from "2026-06-11" + "13:00 UTC-6".
 function parseKickoff(date?: string, time?: string): number | null {
@@ -370,6 +391,7 @@ export function parseFixtures(matches: RawMatch[]): FixtureLite[] {
         label: m.group ?? m.round ?? "",
         isKnockout: !m.group,
         venue: m.ground ?? "",
+        stadium: STADIUM_BY_CITY[m.ground ?? ""] ?? "",
         home: { id: toId(m.team1), name: displayName(m.team1) },
         away: { id: toId(m.team2), name: displayName(m.team2) },
         score,
