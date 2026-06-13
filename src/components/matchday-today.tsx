@@ -6,6 +6,7 @@ import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { getTeam, teamColor } from "@/lib/data/teams";
 import { ownerMap } from "@/lib/scoring";
 import { SilkBackground } from "@/components/ui/silk-background";
@@ -552,8 +553,15 @@ function TeamSide({
           ?
         </span>
       )}
-      <span className="text-sm font-bold leading-tight sm:text-base">{name}</span>
-      <span className="flex items-center gap-1 text-[11px] text-white/70">
+      <span className="text-sm font-bold leading-tight drop-shadow-sm sm:text-base">
+        {name}
+      </span>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+          owner ? "bg-white/20 text-white" : "text-white/60",
+        )}
+      >
         <User className="h-3 w-3" />
         {owner ?? t("today.noOwner")}
       </span>
