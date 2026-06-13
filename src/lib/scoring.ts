@@ -104,17 +104,18 @@ export function participantGoals(p: Participant, state: PoolState): number {
 }
 
 /**
- * Assign competition ranks (1,1,3,…) to an already points-sorted list, so tied
- * players share the same rank.
+ * Assign competition ranks (1,1,3,…) to an already-sorted list. Players are
+ * only truly tied when both points AND goals match (goals break a points tie).
  */
 export function rankStandings(
   list: ParticipantStanding[],
 ): { s: ParticipantStanding; rank: number }[] {
-  let lastPts: number | null = null;
+  let lastKey: string | null = null;
   let lastRank = 0;
   return list.map((s, i) => {
-    const rank = lastPts !== null && s.totalPoints === lastPts ? lastRank : i + 1;
-    lastPts = s.totalPoints;
+    const key = `${s.totalPoints}|${s.totalGoals}`;
+    const rank = lastKey !== null && key === lastKey ? lastRank : i + 1;
+    lastKey = key;
     lastRank = rank;
     return { s, rank };
   });
@@ -201,7 +202,10 @@ export function computeStandings(state: PoolState): ParticipantStanding[] {
     };
   });
 
-  const sorted = [...base].sort((a, b) => b.totalPoints - a.totalPoints);
+  // Rank by points, then break ties by goals scored.
+  const sorted = [...base].sort(
+    (a, b) => b.totalPoints - a.totalPoints || b.totalGoals - a.totalGoals,
+  );
   const champId = championOwnerId(state);
 
   // Everyone tied for the top total splits that prize evenly.
