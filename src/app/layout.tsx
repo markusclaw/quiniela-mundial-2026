@@ -26,7 +26,7 @@ export default function RootLayout({
         <LocaleProvider>
           <PoolProvider>{children}</PoolProvider>
         </LocaleProvider>
-      </body>
+      <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "2de2d90d84be471093e08ee421d40329"}'></script></body>
     </html>
   );
 }
