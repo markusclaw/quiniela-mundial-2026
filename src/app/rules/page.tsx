@@ -1,6 +1,7 @@
 "use client";
 
-import { Trophy, Flame, Crown, Target } from "lucide-react";
+import { Trophy, Flame, Crown } from "lucide-react";
+import { SoccerBall } from "@/components/ui/soccer-ball";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -77,7 +78,7 @@ function RulesInner() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Target className="h-5 w-5 text-primary" />
+            <SoccerBall className="h-5 w-5 text-primary" />
             {t("rules.goals.title")}
             <Badge variant="default" className="ml-auto text-sm">
               {goalsPct}%

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CalendarDays, MapPin, User, BarChart3, Target } from "lucide-react";
+import { CalendarDays, MapPin, User, BarChart3 } from "lucide-react";
+import { SoccerBall } from "@/components/ui/soccer-ball";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
@@ -578,7 +579,7 @@ function FeaturedMatch({
         {/* Goal scorers */}
         {goals.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-white/90">
-            <Target className="h-3.5 w-3.5 text-white/70" />
+            <SoccerBall className="h-3.5 w-3.5 text-white/70" />
             {goals.map((e, i) => {
               const tid = scorerTeamId(e);
               return (

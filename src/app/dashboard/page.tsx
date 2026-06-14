@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Trophy, Users, Crown, ArrowRight, Target } from "lucide-react";
+import { Trophy, Users, Crown, ArrowRight } from "lucide-react";
+import { SoccerBall } from "@/components/ui/soccer-ball";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -71,7 +72,7 @@ function DashboardInner() {
           }
         />
         <LeaderCard
-          icon={Target}
+          icon={SoccerBall}
           label={t("home.goalsLeader")}
           leaders={goalsLeaders.map((s) => s.participant.name)}
           sub={
