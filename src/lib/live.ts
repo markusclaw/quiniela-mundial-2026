@@ -28,6 +28,8 @@ export interface LiveMatch {
   status: string; // short code: 1H, HT, 2H, FT…
   inPlay: boolean;
   finished: boolean;
+  penaltyHome: number | null; // shootout score, if any
+  penaltyAway: number | null;
 }
 
 interface AfFixture {
@@ -85,6 +87,8 @@ export async function fetchLive(): Promise<LiveMatch[] | null> {
         status,
         inPlay: IN_PLAY.has(status),
         finished: FINISHED.has(status),
+        penaltyHome: m.score?.penalty?.home ?? null,
+        penaltyAway: m.score?.penalty?.away ?? null,
       };
     });
   } catch {

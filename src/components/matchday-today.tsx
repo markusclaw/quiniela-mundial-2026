@@ -8,7 +8,12 @@ import { TeamCrest } from "@/components/team-crest";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getTeam, teamColor } from "@/lib/data/teams";
-import { ownerMap } from "@/lib/scoring";
+import {
+  ownerMap,
+  computeStandings,
+  rankStandings,
+  ownedTeamIds,
+} from "@/lib/scoring";
 import { SilkBackground } from "@/components/ui/silk-background";
 import { fetchFixtures, type FixtureLite } from "@/lib/results-sync";
 import {
@@ -143,6 +148,22 @@ export function MatchdayToday() {
 
   const owners = useMemo(() => ownerMap(state), [state]);
 
+  // Live "stake" per team: the owner's current points and rank — so the hero
+  // connects the match to the standings.
+  const stakeFor = useMemo(() => {
+    const byId: Record<string, { points: number; rank: number }> = {};
+    rankStandings(computeStandings(state)).forEach(({ s, rank }) => {
+      byId[s.participant.id] = { points: s.totalPoints, rank };
+    });
+    const ownerId: Record<string, string> = {};
+    for (const p of state.participants)
+      for (const tid of ownedTeamIds(p, state)) ownerId[tid] = p.id;
+    return (teamId: string | null) => {
+      const pid = teamId ? ownerId[teamId] : undefined;
+      return pid ? byId[pid] : undefined;
+    };
+  }, [state]);
+
   // Build a forward-looking feed: a live match headlines; otherwise the next
   // upcoming kickoff does. The "up next" list shows the matches that come
   // AFTER the hero (across days), so a finished game never sits up top.
@@ -222,6 +243,7 @@ export function MatchdayToday() {
         owners={owners}
         loc={loc}
         live={heroLive}
+        stakeFor={stakeFor}
       />
       {rest.length > 0 && (
         <MiniCardRow
@@ -300,12 +322,14 @@ function FeaturedMatch({
   owners,
   loc,
   live,
+  stakeFor,
 }: {
   fixture: FixtureLite;
   isToday: boolean;
   owners: Record<string, string>;
   loc: string;
   live?: LiveMatch | null;
+  stakeFor?: (teamId: string | null) => { points: number; rank: number } | undefined;
 }) {
   const { t } = useT();
   const dateLabel = new Date(`${f.date}T12:00:00`).toLocaleDateString(loc, {
@@ -397,20 +421,55 @@ function FeaturedMatch({
 
   const [statsOpen, setStatsOpen] = useState(false);
   const [stats, setStats] = useState<TeamStat[] | null>(null);
+  // Fetch stats whenever there's a live/finished match (not just when expanded)
+  // so the always-on possession bar has data.
   useEffect(() => {
-    if (!statsOpen || !hasDetail) return;
+    if (!hasDetail) {
+      setStats(null);
+      return;
+    }
     let on = true;
     fetchStats(fixtureId).then((s) => on && setStats(s));
     return () => {
       on = false;
     };
-  }, [statsOpen, hasDetail, fixtureId, liveHome, liveAway]);
+  }, [hasDetail, fixtureId, liveHome, liveAway]);
   const statHome = live
     ? (live.homeId ? getTeam(live.homeId)?.name ?? live.homeName : live.homeName)
     : "";
   const statAway = live
     ? (live.awayId ? getTeam(live.awayId)?.name ?? live.awayName : live.awayName)
     : "";
+
+  // Possession for the always-on momentum bar (in live-feed orientation).
+  const possRow = stats?.find((s) => s.label === "Ball Possession");
+  const homePoss = possRow ? parseInt(String(possRow.home), 10) : NaN;
+  const awayPoss = possRow ? parseInt(String(possRow.away), 10) : NaN;
+  const hasPoss =
+    Number.isFinite(homePoss) && Number.isFinite(awayPoss) && homePoss + awayPoss > 0;
+  const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
+  const homeRGB = rgb(teamColor(live?.homeId));
+  const awayRGB = rgb(teamColor(live?.awayId));
+
+  // Penalty shootout (oriented to the displayed home/away).
+  const penH = sameOrient ? live?.penaltyHome ?? null : live?.penaltyAway ?? null;
+  const penA = sameOrient ? live?.penaltyAway ?? null : live?.penaltyHome ?? null;
+  const hasPens =
+    penH != null && penA != null && (penH > 0 || penA > 0 || live?.status === "P");
+
+  // Flash the score briefly when it changes during a live match (a goal!).
+  const prevScoreRef = useRef<string>("");
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    const key = showLive ? `${liveHome}-${liveAway}` : "";
+    const prev = prevScoreRef.current;
+    prevScoreRef.current = key;
+    if (showLive && prev && prev !== key) {
+      setFlash(true);
+      const id = setTimeout(() => setFlash(false), 1200);
+      return () => clearTimeout(id);
+    }
+  }, [liveHome, liveAway, showLive]);
 
   return (
     <div className="relative overflow-hidden rounded-xl bg-primary text-primary-foreground">
@@ -419,7 +478,7 @@ function FeaturedMatch({
         homeColor={teamColor(f.home.id)}
         awayColor={teamColor(f.away.id)}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/20 to-black/55" />
       <div className="relative z-10 p-5 sm:p-7">
         <div className="mb-5 flex flex-col items-center gap-1.5 text-center">
           {showLive ? (
@@ -443,11 +502,21 @@ function FeaturedMatch({
         </div>
 
         <div className="grid grid-cols-3 items-start gap-2">
-          <TeamSide id={f.home.id} name={teamName(f.home)} owner={f.home.id ? owners[f.home.id] : undefined} />
+          <TeamSide
+            id={f.home.id}
+            name={teamName(f.home)}
+            owner={f.home.id ? owners[f.home.id] : undefined}
+            stake={stakeFor?.(f.home.id)}
+          />
 
           <div className="flex flex-col items-center justify-center pt-2">
             {showLive ? (
-              <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
+              <div
+                className={cn(
+                  "text-4xl font-extrabold tracking-tight transition-transform duration-300 sm:text-6xl",
+                  flash && "scale-110 drop-shadow-[0_0_24px_rgba(255,255,255,0.6)]",
+                )}
+              >
                 {liveHome}<span className="px-1 text-white/50">-</span>{liveAway}
               </div>
             ) : showFinal ? (
@@ -487,8 +556,24 @@ function FeaturedMatch({
             )}
           </div>
 
-          <TeamSide id={f.away.id} name={teamName(f.away)} owner={f.away.id ? owners[f.away.id] : undefined} />
+          <TeamSide
+            id={f.away.id}
+            name={teamName(f.away)}
+            owner={f.away.id ? owners[f.away.id] : undefined}
+            stake={stakeFor?.(f.away.id)}
+          />
         </div>
+
+        {/* Penalty shootout */}
+        {hasPens && (
+          <div className="mt-3 flex items-center justify-center gap-2 text-sm font-bold">
+            <span className="tabular-nums">{penH}</span>
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+              {t("live.penalties")}
+            </span>
+            <span className="tabular-nums">{penA}</span>
+          </div>
+        )}
 
         {/* Goal scorers */}
         {goals.length > 0 && (
@@ -538,6 +623,22 @@ function FeaturedMatch({
         {/* Nested live stats — part of the hero, expandable */}
         {hasDetail && (
           <div className="mt-5 overflow-hidden rounded-lg bg-black/15">
+            {/* Always-on momentum (possession) bar */}
+            {hasPoss && (
+              <div className="space-y-1 px-4 pt-3">
+                <div className="flex h-2 overflow-hidden rounded-full bg-white/15">
+                  <div style={{ width: `${homePoss}%`, backgroundColor: homeRGB }} />
+                  <div style={{ width: `${awayPoss}%`, backgroundColor: awayRGB }} />
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-semibold text-white/80">
+                  <span className="tabular-nums">{homePoss}%</span>
+                  <span className="uppercase tracking-wide text-white/55">
+                    {t("stat.possession")}
+                  </span>
+                  <span className="tabular-nums">{awayPoss}%</span>
+                </div>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setStatsOpen((o) => !o)}
@@ -593,10 +694,12 @@ function TeamSide({
   id,
   name,
   owner,
+  stake,
 }: {
   id: string | null;
   name: string;
   owner?: string;
+  stake?: { points: number; rank: number };
 }) {
   const { t } = useT();
   return (
@@ -613,13 +716,18 @@ function TeamSide({
       </span>
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+          "inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold",
           owner ? "bg-white/20 text-white" : "text-white/60",
         )}
       >
-        <User className="h-3 w-3" />
-        {owner ?? t("today.noOwner")}
+        <User className="h-3 w-3 shrink-0" />
+        <span className="truncate">{owner ?? t("today.noOwner")}</span>
       </span>
+      {owner && stake && stake.points > 0 && (
+        <span className="text-[10px] font-semibold tabular-nums text-white/75">
+          {stake.points} {t("lb.pts")} · #{stake.rank}
+        </span>
+      )}
     </div>
   );
 }
