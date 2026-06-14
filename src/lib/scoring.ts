@@ -167,6 +167,23 @@ export function totalPot(state: PoolState): number {
   );
 }
 
+/** How much money has actually been collected so far (paid buy-ins). */
+export function amountCollected(state: PoolState): number {
+  const individual = state.settings.distributionMode === "individual";
+  const price = state.settings.teamPrice;
+  return state.participants
+    .filter((p) => !p.isModerator)
+    .reduce((sum, p) => {
+      if (individual) {
+        const owned = new Set(ownedTeamIds(p, state));
+        const paid =
+          (p.paidTeams ?? []).filter((id) => owned.has(id)).length * price;
+        return sum + paid;
+      }
+      return sum + (p.paid ? participantBuyIn(p, state) : 0);
+    }, 0);
+}
+
 /** The participant who owns the team that won the World Cup, if decided. */
 export function championOwnerId(state: PoolState): string | null {
   const championTeamId = Object.values(state.results).find(
