@@ -35,6 +35,8 @@ function LeaderboardInner() {
         </p>
       </div>
 
+      <ColumnLegend />
+
       <div className="space-y-2">
         {rankStandings(playing).map(({ s, rank }) => (
           <StandingRow
@@ -52,6 +54,23 @@ function LeaderboardInner() {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+// Explains the per-team stats column codes (PJ/G/E/P/GF/GC/DG/Pts) — a subtle
+// single inline line that wraps.
+function ColumnLegend() {
+  const { t } = useT();
+  const codes = ["mp", "w", "d", "l", "gf", "ga", "gd", "pts"] as const;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1 text-[10px] leading-tight text-muted-foreground">
+      {codes.map((c) => (
+        <span key={c}>
+          <span className="font-semibold text-foreground/70">{t(`tbl.${c}`)}</span>{" "}
+          {t(`tbl.legend.${c}`)}
+        </span>
+      ))}
     </div>
   );
 }

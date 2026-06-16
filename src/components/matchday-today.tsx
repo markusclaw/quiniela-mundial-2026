@@ -396,10 +396,18 @@ function useNow(active: boolean) {
 /**
  * A broadcast-style running clock. The live feed only gives whole elapsed
  * minutes (and refreshes every ~20s), so we anchor on each new minute value
- * and tick the seconds locally — re-syncing whenever the feed advances. Returns
- * "MM:SS" while active, or null when there's no minute to show.
+ * and tick the seconds locally — re-syncing whenever the feed advances.
+ *
+ * `cap` is the regulation end of the current half (45 / 90 / 105 / 120). Past
+ * that we switch to stoppage notation — e.g. "45+2:13" — like a TV clock.
+ * Returns the formatted string while active, or null when there's nothing to
+ * show. (The feed has no authoritative added-time, so "+X" is derived.)
  */
-function useLiveClock(minute: number | null, active: boolean): string | null {
+function useLiveClock(
+  minute: number | null,
+  active: boolean,
+  cap: number,
+): string | null {
   const anchor = useRef<{ min: number; at: number } | null>(null);
   const now = useNow(active);
   if (minute == null || !active) {
@@ -410,9 +418,11 @@ function useLiveClock(minute: number | null, active: boolean): string | null {
     anchor.current = { min: minute, at: now };
   }
   const secs = minute * 60 + Math.max(0, Math.floor((now - anchor.current.at) / 1000));
-  const mm = Math.floor(secs / 60);
-  const ss = secs % 60;
-  return `${mm}:${String(ss).padStart(2, "0")}`;
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (cap > 0 && secs > cap * 60) {
+    return `${cap}+${fmt(secs - cap * 60)}`;
+  }
+  return fmt(secs);
 }
 
 function fmtCountdown(ms: number): string {
@@ -575,8 +585,19 @@ function FeaturedMatch({
   const hasDetail = !!live && fixtureId > 0 && (live.inPlay || live.finished);
   const periodKey = live ? LIVE_PERIOD_KEY[live.status] ?? "today.live" : "today.live";
   const showMin = !!live && SHOW_MINUTE.has(live.status) && live.minute != null;
+  // Regulation end of the current half → drives the "45+2" stoppage notation.
+  const halfCap =
+    live?.status === "1H"
+      ? 45
+      : live?.status === "2H"
+        ? 90
+        : live?.status === "ET"
+          ? (live.minute ?? 0) > 105
+            ? 120
+            : 105
+          : 0;
   // Broadcast-style running clock during play (ticks between feed updates).
-  const liveClock = useLiveClock(live?.minute ?? null, showMin);
+  const liveClock = useLiveClock(live?.minute ?? null, showMin, halfCap);
 
   const [events, setEvents] = useState<MatchEvent[]>([]);
   useEffect(() => {
