@@ -408,17 +408,6 @@ function FeaturedMatch({
     };
     // refetch when the score changes (a new goal happened)
   }, [hasDetail, fixtureId, liveHome, liveAway]);
-  const goals = events.filter(
-    (e) => e.type?.toLowerCase() === "goal" && e.detail !== "Missed Penalty",
-  );
-  const scorerTeamId = (e: MatchEvent): string | null => {
-    if (!live) return null;
-    if (e.teamName === live.homeName) return live.homeId;
-    if (e.teamName === live.awayName) return live.awayId;
-    return null;
-  };
-  const evMin = (e: MatchEvent) =>
-    e.minute != null ? `${e.minute}${e.extra ? `+${e.extra}` : ""}'` : "";
 
   const [statsOpen, setStatsOpen] = useState(false);
   const [stats, setStats] = useState<TeamStat[] | null>(null);
@@ -576,29 +565,8 @@ function FeaturedMatch({
           </div>
         )}
 
-        {/* Goal scorers */}
-        {goals.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-white/90">
-            <SoccerBall className="h-3.5 w-3.5 text-white/70" />
-            {goals.map((e, i) => {
-              const tid = scorerTeamId(e);
-              return (
-                <span key={i} className="inline-flex items-center gap-1">
-                  {tid && <TeamCrest teamId={tid} size="xs" />}
-                  <span className="font-semibold tabular-nums">{evMin(e)}</span>
-                  <span className="max-w-[130px] truncate">
-                    {e.player}
-                    {e.detail === "Penalty"
-                      ? " (P)"
-                      : e.detail === "Own Goal"
-                        ? " (OG)"
-                        : ""}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {/* Key events — goals, cards, VAR */}
+        {hasDetail && <HeroEvents events={events} live={live ?? null} />}
 
         <div className="mt-4 flex flex-col items-center gap-0.5 text-center text-xs text-white/75">
           {(f.stadium || f.venue) && (
@@ -687,6 +655,76 @@ function FeaturedMatch({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Key-events list (FotMob-style): each goal / card / VAR as a row, aligned to
+// its team's side — home on the left, away on the right.
+function HeroEvents({
+  events,
+  live,
+}: {
+  events: MatchEvent[];
+  live: LiveMatch | null;
+}) {
+  const items = events.filter((e) => {
+    const ty = e.type?.toLowerCase();
+    if (ty === "goal") return e.detail !== "Missed Penalty";
+    return ty === "card" || ty === "var";
+  });
+  if (!items.length) return null;
+
+  const isHome = (e: MatchEvent) => !!live && e.teamName === live.homeName;
+  const icon = (e: MatchEvent) => {
+    const ty = e.type?.toLowerCase();
+    if (ty === "goal") return <SoccerBall className="h-3.5 w-3.5 shrink-0" />;
+    if (ty === "var")
+      return (
+        <span className="shrink-0 rounded bg-white/85 px-1 text-[8px] font-bold leading-tight text-black">
+          VAR
+        </span>
+      );
+    const red = /red/i.test(e.detail);
+    return (
+      <span
+        className={cn(
+          "inline-block h-3 w-2 shrink-0 rounded-[1px]",
+          red ? "bg-red-500" : "bg-yellow-400",
+        )}
+      />
+    );
+  };
+  const suffix = (e: MatchEvent) =>
+    e.detail === "Penalty" ? " (P)" : e.detail === "Own Goal" ? " (OG)" : "";
+
+  return (
+    <div className="mx-auto mt-4 max-w-[460px] space-y-1">
+      {items.slice(-12).map((e, i) => {
+        const home = isHome(e);
+        return (
+          <div
+            key={i}
+            className={cn(
+              "flex w-full items-center gap-1.5 text-sm",
+              !home && "flex-row-reverse text-right",
+            )}
+          >
+            <span className="shrink-0 tabular-nums font-bold text-white/80">
+              {e.minute}
+              {e.extra ? `+${e.extra}` : ""}&apos;
+            </span>
+            {icon(e)}
+            <span className="min-w-0 flex-1 truncate text-white/90">
+              {e.player}
+              {suffix(e)}
+              {e.assist ? (
+                <span className="text-white/55"> · {e.assist}</span>
+              ) : null}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

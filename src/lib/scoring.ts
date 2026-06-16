@@ -1,6 +1,8 @@
 import type {
   Participant,
+  PayoutPresetId,
   PoolState,
+  PrizeType,
   ScoringConfig,
   Stage,
   TeamResult,
@@ -17,15 +19,72 @@ export const DEFAULT_SCORING: ScoringConfig = {
   final: 34,
   champion: 55,
   underdogMultiplier: 1.5, // Pot 3 & 4 teams on knockout milestones
-  // Three payouts (must sum to 1): champion 7/12, most points 5/24, most
-  // goals 5/24 — i.e. the winner takes ~58.3%, and the remaining ~41.7% is
-  // split evenly between the most-points and most-goals winners.
+  // Legacy 3-way split, kept for back-compat. The live engine now reads
+  // `payoutPreset` (below) via PAYOUT_PRESETS instead.
   payout: {
     champion: 7 / 12, // ≈ 0.5833 — owner of the World Cup winner
     points: 5 / 24, // ≈ 0.2083 — most points overall
     goals: 5 / 24, // ≈ 0.2083 — most goals scored overall
   },
+  // How many winners share the pot. Default to the 5-prize preset; the
+  // organizer can switch between 3 / 5 / 7 in Admin → Settings.
+  payoutPreset: "five",
+  // Champion takes a flat $1,200 off the top; the rest of the pot is split
+  // among the other prizes by their relative weights. Set to 0 in Admin to
+  // make the champion a pure percentage instead.
+  championFixed: 1200,
 };
+
+/**
+ * A single payable prize: which kind, and what fraction of the pot it takes.
+ * Each preset's fractions sum to 1.
+ */
+export interface PrizeDef {
+  type: PrizeType;
+  pct: number; // fraction of the pot (0–1)
+}
+
+/**
+ * Configurable payout presets. Every preset sums to 1 (100% of the pot).
+ * - three: the original model (champion-heavy, points & goals).
+ * - five  (default): adds Subcampeón + Tercer lugar — more winners, champion
+ *   still clearly the biggest, points still a major prize.
+ * - seven: adds Cuarto lugar + Mayor supervivencia for the widest spread.
+ * All prizes here are derivable from data we already track (no picks).
+ */
+export const PAYOUT_PRESETS: Record<PayoutPresetId, PrizeDef[]> = {
+  three: [
+    { type: "champion", pct: 7 / 12 }, // 58.33%
+    { type: "most_points", pct: 5 / 24 }, // 20.83%
+    { type: "most_goals", pct: 5 / 24 }, // 20.83%
+  ],
+  five: [
+    { type: "champion", pct: 0.45 },
+    { type: "most_points", pct: 0.25 },
+    { type: "most_goals", pct: 0.15 },
+    { type: "runner_up", pct: 0.1 },
+    { type: "third_place", pct: 0.05 },
+  ],
+  seven: [
+    { type: "champion", pct: 0.4 },
+    { type: "most_points", pct: 0.23 },
+    { type: "most_goals", pct: 0.15 },
+    { type: "runner_up", pct: 0.1 },
+    { type: "third_place", pct: 0.05 },
+    { type: "fourth_place", pct: 0.04 },
+    { type: "survival", pct: 0.03 },
+  ],
+};
+
+/** Which preset is active for this pool (default: five). */
+export function activePresetId(state: PoolState): PayoutPresetId {
+  return state.scoring.payoutPreset ?? "five";
+}
+
+/** The prize list for the pool's active preset. */
+export function activePrizes(state: PoolState): PrizeDef[] {
+  return PAYOUT_PRESETS[activePresetId(state)];
+}
 
 // Ordering of knockout stages for "did the team reach at least X" checks.
 const STAGE_ORDER: Stage[] = [
@@ -184,27 +243,69 @@ export function amountCollected(state: PoolState): number {
     }, 0);
 }
 
-/** The participant who owns the team that won the World Cup, if decided. */
-export function championOwnerId(state: PoolState): string | null {
-  const championTeamId = Object.values(state.results).find(
-    (r) => r.stageReached === "champion",
-  )?.teamId;
-  if (!championTeamId) return null;
+/** The participant who owns a given team, if any (active mode aware). */
+export function ownerOfTeamId(state: PoolState, teamId: string): string | null {
   const owner = state.participants.find((p) =>
-    ownedTeamIds(p, state).includes(championTeamId),
+    ownedTeamIds(p, state).includes(teamId),
   );
   return owner?.id ?? null;
 }
 
-/**
- * Two payouts: the champion's owner gets the champion share; the participant
- * with the most points gets the points share. (One person can win both.)
- */
-export function computeStandings(state: PoolState): ParticipantStanding[] {
-  const s = state.scoring;
-  const pot = totalPot(state);
+/** The participant who owns the team that won the World Cup, if decided. */
+export function championOwnerId(state: PoolState): string | null {
+  const teamId = Object.values(state.results).find(
+    (r) => r.stageReached === "champion",
+  )?.teamId;
+  return teamId ? ownerOfTeamId(state, teamId) : null;
+}
 
-  const base = state.participants.map((participant) => {
+/** Owner of the team that reached the final but did NOT win (runner-up). */
+function runnerUpOwnerId(state: PoolState): string | null {
+  const teamId = Object.values(state.results).find(
+    (r) => r.stageReached === "final",
+  )?.teamId;
+  return teamId ? ownerOfTeamId(state, teamId) : null;
+}
+
+/** Owner of the third-place-match winner / loser, once that match is played. */
+function placeOwnerId(
+  state: PoolState,
+  key: "thirdPlace" | "fourthPlace",
+): string | null {
+  const teamId = Object.values(state.results).find((r) => r[key])?.teamId;
+  return teamId ? ownerOfTeamId(state, teamId) : null;
+}
+
+/** How many of a participant's teams advanced to the knockouts (R32+). */
+export function teamsAlive(p: Participant, state: PoolState): number {
+  return ownedTeamIds(p, state).filter((tid) => {
+    const r = state.results[tid];
+    return r ? reachedAtLeast(r.stageReached, "r32") : false;
+  }).length;
+}
+
+export type PrizeStatus = "active" | "tied" | "pending";
+
+export interface ResolvedPrize {
+  type: PrizeType;
+  pct: number;
+  amount: number; // live currency value (round(pot * pct))
+  winnerIds: string[];
+  winnerNames: string[];
+  status: PrizeStatus;
+}
+
+interface ParticipantTotal {
+  participant: Participant;
+  teamBreakdowns: TeamPointsBreakdown[];
+  teamPointsTotal: number;
+  totalPoints: number;
+  totalGoals: number;
+}
+
+/** Per-participant points + goals (the common base for ranking & prizes). */
+function participantTotals(state: PoolState): ParticipantTotal[] {
+  return state.participants.map((participant) => {
     const teamBreakdowns = ownedTeamIds(participant, state)
       .map((tid) => state.results[tid])
       .filter(Boolean)
@@ -218,32 +319,154 @@ export function computeStandings(state: PoolState): ParticipantStanding[] {
       totalGoals: participantGoals(participant, state),
     };
   });
+}
+
+/** All participants tied at the (positive) top of a metric. */
+function leadersByMetric(
+  base: ParticipantTotal[],
+  sel: (st: ParticipantTotal) => number,
+): string[] {
+  const top = Math.max(0, ...base.map(sel));
+  return top > 0
+    ? base.filter((st) => sel(st) === top).map((st) => st.participant.id)
+    : [];
+}
+
+/**
+ * Leaders of a metric with a secondary tiebreaker — e.g. most points, with
+ * goals breaking ties (matching the standings sort). A player only ends up
+ * sharing the prize when tied on BOTH the primary and secondary metric.
+ */
+function leadersWithTiebreak(
+  base: ParticipantTotal[],
+  primary: (st: ParticipantTotal) => number,
+  secondary: (st: ParticipantTotal) => number,
+): string[] {
+  const top = Math.max(0, ...base.map(primary));
+  if (top <= 0) return [];
+  const pool = base.filter((st) => primary(st) === top);
+  const sec = Math.max(...pool.map(secondary));
+  return pool.filter((st) => secondary(st) === sec).map((st) => st.participant.id);
+}
+
+/**
+ * The currency value of each active prize, before rounding.
+ *
+ * Normally every prize takes its preset percentage of the pot. But if a fixed
+ * champion prize is configured (`scoring.championFixed > 0`), the champion
+ * takes that flat amount off the top (capped at the pot) and the remaining pot
+ * is split among the other prizes in proportion to their preset weights.
+ */
+function prizeAmounts(state: PoolState): { type: PrizeType; amount: number }[] {
+  const pot = totalPot(state);
+  const prizes = activePrizes(state);
+  const fixed = state.scoring.championFixed ?? 0;
+  const hasChampion = prizes.some((p) => p.type === "champion");
+
+  if (fixed > 0 && hasChampion) {
+    const champAmount = Math.min(fixed, pot);
+    const remaining = Math.max(0, pot - champAmount);
+    const others = prizes.filter((p) => p.type !== "champion");
+    const weight = others.reduce((sum, p) => sum + p.pct, 0) || 1;
+    return prizes.map((p) =>
+      p.type === "champion"
+        ? { type: p.type, amount: champAmount }
+        : { type: p.type, amount: remaining * (p.pct / weight) },
+    );
+  }
+  return prizes.map((p) => ({ type: p.type, amount: pot * p.pct }));
+}
+
+/**
+ * Resolve the active preset's prizes into live winners + dollar amounts.
+ * Knockout-dependent prizes (champion / runner-up / 3rd / 4th) are "pending"
+ * until the bracket decides them; metric prizes (points / goals / survival)
+ * are awarded provisionally to the current leader(s) and marked "tied" when
+ * more than one player shares the top.
+ */
+export function resolvePrizes(state: PoolState): ResolvedPrize[] {
+  const pot = totalPot(state);
+  const base = participantTotals(state);
+  const amounts = prizeAmounts(state);
+  const nameOf = (id: string) =>
+    state.participants.find((p) => p.id === id)?.name ?? "";
+
+  const winnersFor = (type: PrizeType): string[] => {
+    switch (type) {
+      case "champion": {
+        const id = championOwnerId(state);
+        return id ? [id] : [];
+      }
+      case "runner_up": {
+        const id = runnerUpOwnerId(state);
+        return id ? [id] : [];
+      }
+      case "third_place": {
+        const id = placeOwnerId(state, "thirdPlace");
+        return id ? [id] : [];
+      }
+      case "fourth_place": {
+        const id = placeOwnerId(state, "fourthPlace");
+        return id ? [id] : [];
+      }
+      case "most_points":
+        return leadersWithTiebreak(
+          base,
+          (st) => st.totalPoints,
+          (st) => st.totalGoals,
+        );
+      case "most_goals":
+        return leadersWithTiebreak(
+          base,
+          (st) => st.totalGoals,
+          (st) => st.totalPoints,
+        );
+      case "survival":
+        return leadersByMetric(base, (st) => teamsAlive(st.participant, state));
+      default:
+        return [];
+    }
+  };
+
+  return amounts.map(({ type, amount }) => {
+    const winnerIds = winnersFor(type);
+    const status: PrizeStatus =
+      winnerIds.length === 0
+        ? "pending"
+        : winnerIds.length > 1
+          ? "tied"
+          : "active";
+    const rounded = Math.round(amount);
+    return {
+      type,
+      // Effective share of the pot (so a fixed champion shows its real %).
+      pct: pot > 0 ? amount / pot : 0,
+      amount: rounded,
+      winnerIds,
+      winnerNames: winnerIds.map(nameOf),
+      status,
+    };
+  });
+}
+
+/**
+ * Standings + live pot shares. Each participant's `potShare` is the sum of
+ * every active-preset prize they're currently winning (split evenly on ties).
+ */
+export function computeStandings(state: PoolState): ParticipantStanding[] {
+  const base = participantTotals(state);
 
   // Rank by points, then break ties by goals scored.
   const sorted = [...base].sort(
     (a, b) => b.totalPoints - a.totalPoints || b.totalGoals - a.totalGoals,
   );
-  const champId = championOwnerId(state);
-
-  // Everyone tied for the top total splits that prize evenly.
-  const leadersBy = (sel: (st: (typeof base)[number]) => number): string[] => {
-    const top = Math.max(0, ...base.map(sel));
-    return top > 0
-      ? base.filter((st) => sel(st) === top).map((st) => st.participant.id)
-      : [];
-  };
-  const pointsLeaders = leadersBy((st) => st.totalPoints);
-  const goalsLeaders = leadersBy((st) => st.totalGoals);
 
   const shares: Record<string, number> = {};
-  const award = (ids: string[], pool: number) => {
-    if (!ids.length) return;
-    const each = pool / ids.length;
-    for (const id of ids) shares[id] = (shares[id] ?? 0) + each;
-  };
-  if (champId) shares[champId] = (shares[champId] ?? 0) + pot * s.payout.champion;
-  award(pointsLeaders, pot * s.payout.points);
-  award(goalsLeaders, pot * (s.payout.goals ?? 0));
+  for (const prize of resolvePrizes(state)) {
+    if (!prize.winnerIds.length) continue;
+    const each = prize.amount / prize.winnerIds.length;
+    for (const id of prize.winnerIds) shares[id] = (shares[id] ?? 0) + each;
+  }
 
   return sorted.map((st, i) => ({
     ...st,

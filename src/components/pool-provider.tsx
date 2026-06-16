@@ -109,10 +109,14 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseEnabled) {
       // Whenever a write lands on the server, adopt the authoritative result
-      // (which may include changes merged in from other devices).
+      // (which may include changes merged in from other devices). Migrate it so
+      // defaults added in newer versions (e.g. payout preset, fixed champion
+      // prize) are always present — otherwise an older saved blob would briefly
+      // override them after each save.
       onRemoteSaved((saved) => {
-        lastJsonRef.current = JSON.stringify(saved);
-        setStateRaw(saved);
+        const migrated = migrateState(saved);
+        lastJsonRef.current = JSON.stringify(migrated);
+        setStateRaw(migrated);
       });
       // Attach the realtime listener synchronously so cleanup always tears it
       // down (React dev mounts effects twice).
@@ -351,6 +355,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             (next.goalsFor ?? 0) !== (cur.goalsFor ?? 0) ||
             (next.groupGoalsFor ?? 0) !== (cur.groupGoalsFor ?? 0) ||
             (next.groupGoalsAgainst ?? 0) !== (cur.groupGoalsAgainst ?? 0) ||
+            !!next.thirdPlace !== !!cur.thirdPlace ||
+            !!next.fourthPlace !== !!cur.fourthPlace ||
             next.stageReached !== cur.stageReached
           ) {
             results[teamId] = next;

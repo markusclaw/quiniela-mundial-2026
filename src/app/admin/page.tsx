@@ -30,9 +30,15 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatMoney } from "@/lib/utils";
-import { participantBuyIn, ownedTeamIds } from "@/lib/scoring";
+import {
+  participantBuyIn,
+  ownedTeamIds,
+  totalPot,
+  activePresetId,
+  resolvePrizes,
+} from "@/lib/scoring";
 import { GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
-import type { Participant, Stage } from "@/lib/types";
+import type { Participant, PayoutPresetId, Stage } from "@/lib/types";
 
 const STAGE_KEYS: { value: Stage; key: string }[] = [
   { value: "group", key: "stageOpt.group" },
@@ -649,6 +655,94 @@ function PlayerRow({
   );
 }
 
+function PayoutPresetCard() {
+  const { state, updateScoring } = usePool();
+  const { t } = useT();
+  const cur = state.settings.currency;
+  const pot = totalPot(state);
+  const active = activePresetId(state);
+  const prizes = resolvePrizes(state);
+  const championFixed = state.scoring.championFixed ?? 0;
+
+  const presets: PayoutPresetId[] = ["three", "five", "seven"];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{t("admin.payout.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">{t("admin.payout.desc")}</p>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          {presets.map((id) => {
+            const selected = id === active;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => updateScoring({ payoutPreset: id })}
+                className={cn(
+                  "rounded-lg border p-3 text-left transition-colors",
+                  selected
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "hover:bg-secondary/50",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold">{t(`preset.${id}`)}</span>
+                  {selected && (
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                  )}
+                </div>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  {t(`preset.${id}.sub`)}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Fixed champion prize. 0 = champion takes its percentage instead. */}
+        <div className="max-w-[220px] space-y-1.5">
+          <Label>{t("admin.payout.championFixed")}</Label>
+          <Input
+            type="number"
+            min={0}
+            value={championFixed}
+            onChange={(e) =>
+              updateScoring({ championFixed: Math.max(0, Number(e.target.value) || 0) })
+            }
+          />
+          <p className="text-[11px] text-muted-foreground">
+            {t("admin.payout.championFixed.hint")}
+          </p>
+        </div>
+
+        {/* Live breakdown against the current pot (reflects the fixed prize). */}
+        <div className="rounded-lg border bg-muted/30">
+          {prizes.map((p) => (
+            <div
+              key={p.type}
+              className="flex items-center justify-between border-b px-3 py-1.5 text-sm last:border-0"
+            >
+              <span>{t(`prize.${p.type}`)}</span>
+              <span className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {Math.round(p.pct * 100)}%
+                </span>
+                <span className="font-mono font-bold tabular-nums">
+                  {formatMoney(p.amount, cur)}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingsTab() {
   const { state, updateSettings, rebuildPackages, loadDemo, reset } = usePool();
   const { t } = useT();
@@ -798,6 +892,8 @@ function SettingsTab() {
           )}
         </CardContent>
       </Card>
+
+      <PayoutPresetCard />
 
       <ResultsPanel />
 

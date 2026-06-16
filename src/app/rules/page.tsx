@@ -1,20 +1,32 @@
 "use client";
 
-import { Trophy, Flame, Crown } from "lucide-react";
+import { Trophy, Flame, Crown, Medal, ShieldCheck } from "lucide-react";
 import { SoccerBall } from "@/components/ui/soccer-ball";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
+import { PrizeRace } from "@/components/prize-race";
 import { useT } from "@/lib/i18n";
+import { resolvePrizes } from "@/lib/scoring";
+import type { PrizeType } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+const PRIZE_ICON: Record<PrizeType, React.ElementType> = {
+  champion: Crown,
+  runner_up: Medal,
+  third_place: Medal,
+  fourth_place: Medal,
+  most_points: Flame,
+  most_goals: SoccerBall,
+  survival: ShieldCheck,
+};
 
 function RulesInner() {
   const { state } = usePool();
   const { t } = useT();
   const s = state.scoring;
-  const championPct = Math.round(s.payout.champion * 100);
-  const pointsPct = Math.round(s.payout.points * 100);
-  const goalsPct = Math.round((s.payout.goals ?? 0) * 100);
+  const prizes = resolvePrizes(state);
 
   const pointRows: { label: string; value: string }[] = [
     { label: t("rules.pt.groupWin"), value: `+${s.groupWin}` },
@@ -36,61 +48,45 @@ function RulesInner() {
         </p>
       </div>
 
+      {/* Live prize race — current $ value + who's winning each prize. */}
+      <PrizeRace />
+
       <h2 className="text-lg font-bold">{t("rules.waysTitle")}</h2>
 
-      {/* Payout 1: Champion */}
-      <Card className="border-gold/40 bg-gold/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Crown className="h-5 w-5 text-gold-foreground" />
-            {t("rules.champion.title")}
-            <Badge variant="gold" className="ml-auto text-sm">
-              {championPct}%
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="leading-relaxed text-muted-foreground">
-            {t("rules.champion.body")}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Payout 2: Most points */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Flame className="h-5 w-5 text-primary" />
-            {t("rules.points.title")}
-            <Badge variant="default" className="ml-auto text-sm">
-              {pointsPct}%
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="leading-relaxed text-muted-foreground">
-            {t("rules.points.body")}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Payout 3: Most goals */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <SoccerBall className="h-5 w-5 text-primary" />
-            {t("rules.goals.title")}
-            <Badge variant="default" className="ml-auto text-sm">
-              {goalsPct}%
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="leading-relaxed text-muted-foreground">
-            {t("rules.goals.body")}
-          </p>
-        </CardContent>
-      </Card>
+      {/* Payout cards — driven by the active preset (3 / 5 / 7 prizes). */}
+      {prizes.map((p) => {
+        const Icon = PRIZE_ICON[p.type];
+        const champion = p.type === "champion";
+        return (
+          <Card
+            key={p.type}
+            className={champion ? "border-gold/40 bg-gold/5" : ""}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Icon
+                  className={cn(
+                    "h-5 w-5",
+                    champion ? "text-gold-foreground" : "text-primary",
+                  )}
+                />
+                {t(`prize.${p.type}`)}
+                <Badge
+                  variant={champion ? "gold" : "default"}
+                  className="ml-auto text-sm"
+                >
+                  {Math.round(p.pct * 100)}%
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="leading-relaxed text-muted-foreground">
+                {t(`rules.prize.${p.type}`)}
+              </p>
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {/* How points work — plain */}
       <Card>

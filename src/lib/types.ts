@@ -36,6 +36,17 @@ export type Stage =
   | "champion"
   | "eliminated";
 
+// Configurable payout: how many winners share the pot.
+export type PayoutPresetId = "three" | "five" | "seven";
+export type PrizeType =
+  | "champion"
+  | "runner_up"
+  | "third_place"
+  | "fourth_place"
+  | "most_points"
+  | "most_goals"
+  | "survival";
+
 // Per-team live result (auto-synced from the web, or set by the moderator)
 export interface TeamResult {
   teamId: string;
@@ -45,6 +56,8 @@ export interface TeamResult {
   goalsFor?: number; // total goals the team has scored (all stages) — for the metric
   groupGoalsFor?: number; // group-stage goals for (standings table)
   groupGoalsAgainst?: number; // group-stage goals against (standings table)
+  thirdPlace?: boolean; // won the third-place match
+  fourthPlace?: boolean; // lost the third-place match
   stageReached: Stage; // furthest stage reached / eliminated
   manual?: boolean; // true = moderator-edited; auto-sync won't overwrite it
 }
@@ -81,6 +94,13 @@ export interface ScoringConfig {
     points: number;
     goals: number;
   };
+  // Active payout preset (how many winners share the pot). Defaults to "five"
+  // when absent. See PAYOUT_PRESETS in scoring.ts for the splits.
+  payoutPreset?: PayoutPresetId;
+  // Optional fixed prize (currency) for the champion. When > 0, the champion
+  // takes this flat amount off the top and the rest of the pot is split among
+  // the remaining prizes by their relative weights. 0/undefined = pure %.
+  championFixed?: number;
 }
 
 export type DistributionMode = "balanced" | "tiered" | "individual";

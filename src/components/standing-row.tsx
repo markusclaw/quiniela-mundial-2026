@@ -39,11 +39,15 @@ export function StandingRow({
   rank,
   isMe,
   bare = false,
+  alive,
+  owned,
 }: {
   s: ParticipantStanding;
   rank: number;
   isMe: boolean;
   bare?: boolean; // render without a Card wrapper (for a shared single card)
+  alive?: number; // teams still in the knockouts
+  owned?: number; // total teams owned
 }) {
   const { state } = usePool();
   const { t } = useT();
@@ -108,6 +112,15 @@ export function StandingRow({
 
       {open && (
         <div className="border-t bg-secondary/30">
+          {alive !== undefined && alive > 0 && (
+            <div className="flex items-center gap-1.5 px-3 pt-2 text-[11px] font-medium text-primary">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+              {t("home.alive", { n: alive })}
+              {owned !== undefined && (
+                <span className="text-muted-foreground">/ {owned}</span>
+              )}
+            </div>
+          )}
           {s.teamBreakdowns.length === 0 ? (
             <p className="py-3 text-center text-xs text-muted-foreground">
               {t("lb.empty")}

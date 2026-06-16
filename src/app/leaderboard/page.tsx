@@ -10,6 +10,7 @@ import {
   totalPot,
   ownedTeamIds,
   rankStandings,
+  teamsAlive,
 } from "@/lib/scoring";
 import { formatMoney } from "@/lib/utils";
 
@@ -41,6 +42,8 @@ function LeaderboardInner() {
             s={s}
             rank={rank}
             isMe={s.participant.id === me?.id}
+            alive={teamsAlive(s.participant, state)}
+            owned={ownedTeamIds(s.participant, state).length}
           />
         ))}
         {playing.length === 0 && (

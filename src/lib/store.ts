@@ -55,6 +55,8 @@ function freshResults(): Record<string, TeamResult> {
       goalsFor: 0,
       groupGoalsFor: 0,
       groupGoalsAgainst: 0,
+      thirdPlace: false,
+      fourthPlace: false,
       stageReached: "group",
     };
   }
@@ -114,6 +116,10 @@ export function migrateState(s: PoolState): PoolState {
   if (scoring && (!scoring.payout || typeof scoring.payout.goals !== "number")) {
     scoring.payout = { champion: 7 / 12, points: 5 / 24, goals: 5 / 24 };
   }
+  // Default older pools to the 5-prize preset (the new configurable model).
+  if (scoring && !scoring.payoutPreset) scoring.payoutPreset = "five";
+  // Default the champion to a flat $1,200 (organizer can change in Admin).
+  if (scoring && scoring.championFixed === undefined) scoring.championFixed = 1200;
   if (scoring) delete scoring.pool;
   // Always re-assert the organizer PIN so login works on any saved pool.
   const mod = s.participants?.find((p) => p.isModerator);

@@ -147,9 +147,11 @@ const ROUND_STAGE: { test: (r: string) => boolean; stage: Stage; rank: number }[
   { test: (r) => /^final$|^final\b/i.test(r), stage: "final", rank: 5 },
 ];
 
+const THIRD_PLACE_RE = /3rd place|third place|play-?off for third/i;
+
 function knockoutStage(round: string): { stage: Stage; rank: number } | null {
-  // 3rd-place game adds nothing (and must not be read as the "Final").
-  if (/3rd place|third place/i.test(round)) return null;
+  // 3rd-place game is handled separately (and must not be read as the "Final").
+  if (THIRD_PLACE_RE.test(round)) return null;
   return ROUND_STAGE.find((r) => r.test(round)) ?? null;
 }
 
@@ -182,6 +184,8 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
     g.ga += ga;
   };
   let championId: string | null = null;
+  let thirdId: string | null = null;
+  let fourthId: string | null = null;
 
   for (const m of matches) {
     const id1 = toId(m.team1);
@@ -208,6 +212,24 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       } else {
         t1.groupDraws++;
         t2.groupDraws++;
+      }
+      continue;
+    }
+
+    // Third-place match: its teams already reached "sf" (lost their semis), so
+    // we don't touch stageReached — we only record who finished 3rd vs 4th and
+    // count the goals scored. Penalty/ET aware, like the final.
+    if (m.round && THIRD_PLACE_RE.test(m.round)) {
+      if (score && id1 && id2) {
+        ensure(id1).goalsFor = (ensure(id1).goalsFor ?? 0) + score[0];
+        ensure(id2).goalsFor = (ensure(id2).goalsFor ?? 0) + score[1];
+      }
+      if (id1 && id2) {
+        const winner = decisiveWinner(m, id1, id2);
+        if (winner) {
+          thirdId = winner;
+          fourthId = winner === id1 ? id2 : id1;
+        }
       }
       continue;
     }
@@ -277,6 +299,8 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
   }
 
   if (championId) ensure(championId).stageReached = "champion";
+  if (thirdId) ensure(thirdId).thirdPlace = true;
+  if (fourthId) ensure(fourthId).fourthPlace = true;
 
   // Mark remaining group-stage drop-outs as eliminated once the knockout
   // bracket has real names (catches the non-qualifying 3rd-place teams).
@@ -298,6 +322,8 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       goalsFor: t.goalsFor ?? 0,
       groupGoalsFor: gg.gf,
       groupGoalsAgainst: gg.ga,
+      thirdPlace: !!t.thirdPlace,
+      fourthPlace: !!t.fourthPlace,
       stageReached: t.stageReached,
     };
   }
