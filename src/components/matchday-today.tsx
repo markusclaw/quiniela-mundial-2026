@@ -393,6 +393,28 @@ function useNow(active: boolean) {
   return now;
 }
 
+/**
+ * A broadcast-style running clock. The live feed only gives whole elapsed
+ * minutes (and refreshes every ~20s), so we anchor on each new minute value
+ * and tick the seconds locally — re-syncing whenever the feed advances. Returns
+ * "MM:SS" while active, or null when there's no minute to show.
+ */
+function useLiveClock(minute: number | null, active: boolean): string | null {
+  const anchor = useRef<{ min: number; at: number } | null>(null);
+  const now = useNow(active);
+  if (minute == null || !active) {
+    anchor.current = null;
+    return null;
+  }
+  if (!anchor.current || anchor.current.min !== minute) {
+    anchor.current = { min: minute, at: now };
+  }
+  const secs = minute * 60 + Math.max(0, Math.floor((now - anchor.current.at) / 1000));
+  const mm = Math.floor(secs / 60);
+  const ss = secs % 60;
+  return `${mm}:${String(ss).padStart(2, "0")}`;
+}
+
 function fmtCountdown(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60);
@@ -553,6 +575,8 @@ function FeaturedMatch({
   const hasDetail = !!live && fixtureId > 0 && (live.inPlay || live.finished);
   const periodKey = live ? LIVE_PERIOD_KEY[live.status] ?? "today.live" : "today.live";
   const showMin = !!live && SHOW_MINUTE.has(live.status) && live.minute != null;
+  // Broadcast-style running clock during play (ticks between feed updates).
+  const liveClock = useLiveClock(live?.minute ?? null, showMin);
 
   const [events, setEvents] = useState<MatchEvent[]>([]);
   useEffect(() => {
@@ -665,7 +689,11 @@ function FeaturedMatch({
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
               </span>
               {t(periodKey)}
-              {showMin ? ` ${live!.minute}'` : ""}
+              {liveClock ? (
+                <span className="ml-1 tabular-nums">{liveClock}</span>
+              ) : (
+                ""
+              )}
             </span>
           ) : showFinal || f.played || pending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-foreground shadow-md">
@@ -1046,47 +1074,27 @@ function MatchMiniCard({
         month: "short",
       });
 
-  const side = (
-    s: { id: string | null; name: string },
-    goals: number | null,
-  ) => {
-    const owner = s.id ? owners[s.id] : undefined;
-    return (
-      <div className="flex items-center gap-2">
-        {s.id ? (
-          <TeamCrest teamId={s.id} size="sm" />
-        ) : (
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-muted text-xs">
-            ?
-          </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold leading-tight">
-            {teamName(s)}
-          </span>
-          {owner && (
-            <span className="block truncate text-[10px] text-muted-foreground">
-              {owner}
-            </span>
-          )}
-        </span>
-        <span className="ml-auto text-base font-extrabold tabular-nums">
-          {goals != null ? goals : ""}
-        </span>
-      </div>
+  const homeOwner = f.home.id ? owners[f.home.id] : undefined;
+  const awayOwner = f.away.id ? owners[f.away.id] : undefined;
+  const flag = (s: { id: string | null }) =>
+    s.id ? (
+      <TeamCrest teamId={s.id} size="xs" />
+    ) : (
+      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-muted text-[9px] font-bold">
+        ?
+      </span>
     );
-  };
 
   return (
-    <div className="w-[200px] shrink-0 rounded-xl border bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-start justify-between gap-2">
+    <div className="w-[200px] shrink-0 rounded-xl border bg-card p-2.5 shadow-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {f.label}
           </div>
           <div
             className={
-              "text-[10px] font-semibold capitalize " +
+              "text-[10px] font-semibold " +
               (isTodayMatch ? "text-primary" : "text-muted-foreground")
             }
           >
@@ -1094,7 +1102,7 @@ function MatchMiniCard({
           </div>
         </div>
         {isLive ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/70" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
@@ -1102,17 +1110,38 @@ function MatchMiniCard({
             {live!.minute != null ? `${live!.minute}'` : t("today.live")}
           </span>
         ) : isDone ? (
-          <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+          <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
             {t("today.ft")}
           </span>
         ) : (
-          <span className="text-[11px] font-bold text-foreground">{time}</span>
+          <span className="shrink-0 text-[11px] font-bold text-foreground">
+            {time}
+          </span>
         )}
       </div>
-      <div className="space-y-1.5">
-        {side(f.home, score ? score[0] : null)}
-        {side(f.away, score ? score[1] : null)}
+
+      {/* one compact row: flag · HOME · vs/score · AWAY · flag */}
+      <div className="flex items-center gap-1.5">
+        {flag(f.home)}
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
+          {teamName(f.home)}
+        </span>
+        <span className="shrink-0 px-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
+          {score ? `${score[0]}-${score[1]}` : t("today.vs")}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-right text-[12px] font-semibold">
+          {teamName(f.away)}
+        </span>
+        {flag(f.away)}
       </div>
+
+      {/* owners under each side */}
+      {(homeOwner || awayOwner) && (
+        <div className="mt-1 flex items-center justify-between gap-2 text-[9px] uppercase tracking-wide text-muted-foreground">
+          <span className="min-w-0 truncate">{homeOwner ?? "—"}</span>
+          <span className="min-w-0 truncate text-right">{awayOwner ?? "—"}</span>
+        </div>
+      )}
     </div>
   );
 }
