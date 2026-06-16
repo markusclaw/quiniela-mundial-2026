@@ -64,6 +64,12 @@ function prominence(f: FixtureLite): number {
   return ROUND_RANK(f) * 1000 + (200 - Math.min(best, 200));
 }
 
+// How long a match can plausibly run (regulation + half-time + stoppage; wider
+// for knockouts that can go to extra time + penalties).
+function matchWindowMs(f: FixtureLite): number {
+  return (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
+}
+
 function phaseOf(
   f: FixtureLite,
   live: LiveMatch[],
@@ -73,9 +79,7 @@ function phaseOf(
   if (lm?.inPlay) return "live";
   if (lm?.finished || f.played || f.score) return "done";
   if (f.kickoff != null && f.kickoff <= now) {
-    const since = now - f.kickoff;
-    const win = (f.isKnockout ? 3.25 : 2.5) * 3600 * 1000;
-    return since <= win ? "live" : "done";
+    return now - f.kickoff <= matchWindowMs(f) ? "live" : "done";
   }
   return "upcoming";
 }
@@ -85,8 +89,30 @@ function fxKey(f: FixtureLite): string {
   return `${f.date}|${f.home.name}|${f.away.name}`;
 }
 
-// Keep a just-finished match featured for this long so people can read it.
-const FINISHED_GRACE_MS = 15 * 60 * 1000;
+// Keep a just-finished match featured (as a recap) for this long after it ends.
+const RECAP_GRACE_MS = 5 * 60 * 1000;
+// Forget finish stamps older than this so localStorage stays tidy.
+const STAMP_TTL_MS = 6 * 60 * 60 * 1000;
+const FINISH_STORE_KEY = "qm:finishedAt";
+
+// Finish stamps persist across refreshes so the recap is deterministic (no
+// flicker) and survives a reload within the grace window.
+function loadFinishStamps(): Record<string, number> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(FINISH_STORE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function saveFinishStamps(m: Record<string, number>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(FINISH_STORE_KEY, JSON.stringify(m));
+  } catch {
+    /* storage disabled / over quota — recap just won't persist */
+  }
+}
 
 export function MatchdayToday() {
   const { state } = usePool();
@@ -125,27 +151,18 @@ export function MatchdayToday() {
     };
   }, []);
 
-  // Remember which matches we watched go live, and when each finished — so a
-  // just-ended match can stay featured for a grace window (and stale matches
-  // from before this session don't resurface).
-  const seenLiveRef = useRef<Set<string>>(new Set());
-  const finishedAtRef = useRef<Record<string, number>>({});
+  // Persistent finish stamps (loaded once from localStorage), so the post-match
+  // recap is deterministic and survives a refresh within the grace window.
+  const finishedAtRef = useRef<Record<string, number> | null>(null);
+  if (finishedAtRef.current === null) finishedAtRef.current = loadFinishStamps();
+
+  // Low-frequency tick so the recap expires (and the hero advances) on time
+  // even when the live feed isn't polling.
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (!fixtures) return;
-    const now = Date.now();
-    for (const f of fixtures) {
-      const key = fxKey(f);
-      const phase = phaseOf(f, live, now);
-      if (phase === "live") seenLiveRef.current.add(key);
-      else if (
-        phase === "done" &&
-        seenLiveRef.current.has(key) &&
-        !finishedAtRef.current[key]
-      ) {
-        finishedAtRef.current[key] = now;
-      }
-    }
-  }, [fixtures, live]);
+    const id = setInterval(() => setTick((n) => n + 1), 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const owners = useMemo(() => ownerMap(state), [state]);
 
@@ -169,12 +186,14 @@ export function MatchdayToday() {
   // upcoming kickoff does. The "up next" list shows the matches that come
   // AFTER the hero (across days), so a finished game never sits up top.
   // Today's finished results get their own compact strip below.
-  const { hero, rest, heroToday } = useMemo(() => {
+  const { hero, concurrent, rest, heroToday, heroRecap } = useMemo(() => {
     const empty = {
       hero: null as FixtureLite | null,
+      concurrent: [] as FixtureLite[],
       rest: [] as FixtureLite[],
       results: [] as FixtureLite[],
       heroToday: false,
+      heroRecap: false,
     };
     if (!fixtures || !fixtures.length) return empty;
     const now = Date.now();
@@ -182,27 +201,53 @@ export function MatchdayToday() {
     const byTime = (a: FixtureLite, b: FixtureLite) =>
       (a.kickoff ?? Infinity) - (b.kickoff ?? Infinity);
 
-    const liveOnes = fixtures.filter((f) => phaseOf(f, live, now) === "live");
+    // Stamp the moment a match looks done AND plausibly just ended, then prune
+    // old stamps. The "just ended" bound stops an old finished match from
+    // resurfacing as a recap on a fresh page load.
+    const stamps = finishedAtRef.current!;
+    let changed = false;
+    for (const f of fixtures) {
+      const key = fxKey(f);
+      if (stamps[key] != null) continue;
+      const justEnded =
+        f.kickoff != null &&
+        now - f.kickoff >= 0 &&
+        now - f.kickoff <= matchWindowMs(f) + RECAP_GRACE_MS;
+      if (justEnded && phaseOf(f, live, now) === "done") {
+        stamps[key] = now;
+        changed = true;
+      }
+    }
+    for (const key of Object.keys(stamps)) {
+      if (now - stamps[key] > STAMP_TTL_MS) {
+        delete stamps[key];
+        changed = true;
+      }
+    }
+    if (changed) saveFinishStamps(stamps);
+
+    // Once stamped finished, a match stays "done" — this kills the live↔done
+    // flicker in the gap between the live feed dropping a finished match and
+    // the free results feed publishing its final score.
+    const phaseFor = (f: FixtureLite): "live" | "upcoming" | "done" =>
+      stamps[fxKey(f)] != null ? "done" : phaseOf(f, live, now);
+
+    const liveOnes = fixtures.filter((f) => phaseFor(f) === "live");
     const upcoming = fixtures
-      .filter((f) => phaseOf(f, live, now) === "upcoming")
+      .filter((f) => phaseFor(f) === "upcoming")
       .sort(byTime);
     const finishedToday = fixtures
-      .filter((f) => phaseOf(f, live, now) === "done" && f.date === today)
+      .filter((f) => phaseFor(f) === "done" && f.date === today)
       .sort((a, b) => (b.kickoff ?? 0) - (a.kickoff ?? 0));
 
-    // Matches that finished within the grace window (most recent first) — kept
+    // Matches that finished within the recap window (most recent first) — kept
     // featured so people can read the result before the hero moves on.
     const recentlyFinished = fixtures
       .filter((f) => {
-        if (phaseOf(f, live, now) !== "done") return false;
-        const at = finishedAtRef.current[fxKey(f)];
-        return !!at && now - at < FINISHED_GRACE_MS;
+        const at = stamps[fxKey(f)];
+        return at != null && now - at < RECAP_GRACE_MS;
       })
-      .sort(
-        (a, b) =>
-          (finishedAtRef.current[fxKey(b)] ?? 0) -
-          (finishedAtRef.current[fxKey(a)] ?? 0),
-      );
+      .sort((a, b) => (stamps[fxKey(b)] ?? 0) - (stamps[fxKey(a)] ?? 0));
 
     let h: FixtureLite | null = null;
     if (liveOnes.length)
@@ -212,16 +257,38 @@ export function MatchdayToday() {
     else h = finishedToday[0] ?? null;
     if (!h) return empty;
 
-    const restLive = liveOnes.filter((f) => f !== h);
-    const restUpcoming = upcoming.filter((f) => f !== h);
+    // Matches happening at the same time as the hero — surfaced as switcher
+    // chips so you can flip the hero between them. When two+ games are live,
+    // that's the whole live set; for an upcoming hero, it's everything sharing
+    // its exact kickoff (the simultaneous final round of group play).
+    let concurrent: FixtureLite[];
+    if (liveOnes.length && liveOnes.includes(h)) {
+      concurrent = [...liveOnes].sort((a, b) => prominence(b) - prominence(a));
+    } else if (upcoming.includes(h) && h.kickoff != null) {
+      concurrent = upcoming
+        .filter((f) => f.kickoff === h!.kickoff)
+        .sort((a, b) => prominence(b) - prominence(a));
+    } else {
+      concurrent = [h];
+    }
+
+    const concKeys = new Set(concurrent.map(fxKey));
+    const rest = [...liveOnes, ...upcoming].filter(
+      (f) => !concKeys.has(fxKey(f)),
+    );
     return {
       hero: h,
+      concurrent,
       // Keep the home screen focused: just the next 5 upcoming/live matches.
-      rest: [...restLive, ...restUpcoming].slice(0, 5),
+      rest: rest.slice(0, 5),
       results: finishedToday.filter((f) => f !== h),
       heroToday: h.date === today,
+      heroRecap: recentlyFinished.includes(h),
     };
-  }, [fixtures, live]);
+  }, [fixtures, live, tick]);
+
+  // Which concurrent match the user has flipped the hero to (null = default).
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -234,17 +301,33 @@ export function MatchdayToday() {
   }
   if (!fixtures || !hero) return null;
 
-  const heroLive = findLiveFor(live, hero.home.id, hero.away.id);
+  // Featured = the user's chosen concurrent match if still valid, else the
+  // default hero. The switcher only appears when 2+ matches are concurrent.
+  const featured =
+    concurrent.find((f) => fxKey(f) === selectedKey) ?? hero;
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const heroLive = findLiveFor(live, featured.home.id, featured.away.id);
 
   return (
     <div className="space-y-4">
       <FeaturedMatch
-        fixture={hero}
-        isToday={heroToday}
+        fixture={featured}
+        isToday={featured.date === todayStr}
+        recap={heroRecap && featured === hero}
         owners={owners}
         loc={loc}
         live={heroLive}
         stakeFor={stakeFor}
+        switcher={
+          concurrent.length >= 2
+            ? {
+                matches: concurrent,
+                live,
+                selectedKey: fxKey(featured),
+                onSelect: setSelectedKey,
+              }
+            : undefined
+        }
       />
       {rest.length > 0 && (
         <MiniCardRow
@@ -317,20 +400,96 @@ function fmtCountdown(ms: number): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+interface HeroSwitcher {
+  matches: FixtureLite[];
+  live: LiveMatch[];
+  selectedKey: string;
+  onSelect: (key: string) => void;
+}
+
+/** Tappable chips to flip the hero between simultaneous matches. */
+function SwitcherChips({
+  matches,
+  live,
+  selectedKey,
+  onSelect,
+  loc,
+}: HeroSwitcher & { loc: string }) {
+  const { t } = useT();
+  const crest = (id: string | null) =>
+    id ? (
+      <TeamCrest teamId={id} size="xs" />
+    ) : (
+      <span className="grid h-5 w-5 place-items-center rounded-full bg-white/20 text-[9px] font-bold">
+        ?
+      </span>
+    );
+
+  return (
+    <div className="mb-4 flex gap-2 overflow-x-auto no-scrollbar">
+      {matches.map((f) => {
+        const key = fxKey(f);
+        const active = key === selectedKey;
+        const lm = findLiveFor(live, f.home.id, f.away.id);
+        const same = lm ? lm.homeId === f.home.id : true;
+        const isLive = !!lm && lm.inPlay;
+        const mid = isLive
+          ? `${same ? lm!.homeGoals : lm!.awayGoals}-${same ? lm!.awayGoals : lm!.homeGoals}`
+          : f.score
+            ? `${f.score[0]}-${f.score[1]}`
+            : f.kickoff != null
+              ? new Date(f.kickoff).toLocaleTimeString(loc, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : t("today.vs");
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onSelect(key)}
+            aria-pressed={active}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-sm transition-colors",
+              active
+                ? "border-white bg-white text-foreground shadow-md"
+                : "border-white/30 bg-black/25 text-white/90 hover:bg-black/40",
+            )}
+          >
+            {crest(f.home.id)}
+            <span className="tabular-nums">{mid}</span>
+            {crest(f.away.id)}
+            {isLive && (
+              <span className="relative ml-0.5 flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function FeaturedMatch({
   fixture: f,
   isToday,
+  recap = false,
   owners,
   loc,
   live,
   stakeFor,
+  switcher,
 }: {
   fixture: FixtureLite;
   isToday: boolean;
+  recap?: boolean; // shown as a just-finished match recap
   owners: Record<string, string>;
   loc: string;
   live?: LiveMatch | null;
   stakeFor?: (teamId: string | null) => { points: number; rank: number } | undefined;
+  switcher?: HeroSwitcher;
 }) {
   const { t } = useT();
   const dateLabel = new Date(`${f.date}T12:00:00`).toLocaleDateString(loc, {
@@ -408,8 +567,13 @@ function FeaturedMatch({
     };
     // refetch when the score changes (a new goal happened)
   }, [hasDetail, fixtureId, liveHome, liveAway]);
+  const shownEvents = events;
 
   const [statsOpen, setStatsOpen] = useState(false);
+  // A finished match is a recap — surface the details by default.
+  useEffect(() => {
+    if (recap) setStatsOpen(true);
+  }, [recap]);
   const [stats, setStats] = useState<TeamStat[] | null>(null);
   // Fetch stats whenever there's a live/finished match (not just when expanded)
   // so the always-on possession bar has data.
@@ -424,6 +588,7 @@ function FeaturedMatch({
       on = false;
     };
   }, [hasDetail, fixtureId, liveHome, liveAway]);
+  const shownStats = stats;
   const statHome = live
     ? (live.homeId ? getTeam(live.homeId)?.name ?? live.homeName : live.homeName)
     : "";
@@ -432,7 +597,7 @@ function FeaturedMatch({
     : "";
 
   // Possession for the always-on momentum bar (in live-feed orientation).
-  const possRow = stats?.find((s) => s.label === "Ball Possession");
+  const possRow = shownStats?.find((s) => s.label === "Ball Possession");
   const homePoss = possRow ? parseInt(String(possRow.home), 10) : NaN;
   const awayPoss = possRow ? parseInt(String(possRow.away), 10) : NaN;
   const hasPoss =
@@ -446,6 +611,19 @@ function FeaturedMatch({
   const penA = sameOrient ? live?.penaltyAway ?? null : live?.penaltyHome ?? null;
   const hasPens =
     penH != null && penA != null && (penH > 0 || penA > 0 || live?.status === "P");
+
+  // Recap: who won (goals, then penalties for knockouts) — drives the winner
+  // headline + crest hierarchy.
+  const fa = finalScore?.[0] ?? 0;
+  const fb = finalScore?.[1] ?? 0;
+  let winSide: "home" | "away" | "draw" = "draw";
+  if (showFinal) {
+    if (fa > fb) winSide = "home";
+    else if (fb > fa) winSide = "away";
+    else if (penH != null && penA != null && penH !== penA)
+      winSide = penH > penA ? "home" : "away";
+  }
+  const winnerName = winSide === "home" ? teamName(f.home) : teamName(f.away);
 
   // Flash the score briefly when it changes during a live match (a goal!).
   const prevScoreRef = useRef<string>("");
@@ -470,6 +648,15 @@ function FeaturedMatch({
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/20 to-black/55" />
       <div className="relative z-10 p-5 sm:p-7">
+        {switcher && (
+          <SwitcherChips
+            matches={switcher.matches}
+            live={switcher.live}
+            selectedKey={switcher.selectedKey}
+            onSelect={switcher.onSelect}
+            loc={loc}
+          />
+        )}
         <div className="mb-5 flex flex-col items-center gap-1.5 text-center">
           {showLive ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-foreground shadow-md">
@@ -482,7 +669,7 @@ function FeaturedMatch({
             </span>
           ) : showFinal || f.played || pending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-foreground shadow-md">
-              {t("today.ft")}
+              {recap ? t("today.recap") : t("today.ft")}
             </span>
           ) : (
             <span className="rounded-full bg-black/40 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
@@ -491,12 +678,29 @@ function FeaturedMatch({
           )}
         </div>
 
+        {showFinal && (
+          <div className="mb-4 text-center">
+            <span
+              className={cn(
+                "inline-block text-2xl font-black uppercase leading-none tracking-tight drop-shadow-sm sm:text-3xl",
+                winSide === "draw" ? "text-white" : "text-gold",
+              )}
+            >
+              {winSide === "draw"
+                ? t("today.drawResult")
+                : t("today.winsResult", { team: winnerName })}
+            </span>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 items-start gap-2">
           <TeamSide
             id={f.home.id}
             name={teamName(f.home)}
             owner={f.home.id ? owners[f.home.id] : undefined}
             stake={stakeFor?.(f.home.id)}
+            winner={showFinal && winSide === "home"}
+            dim={showFinal && winSide === "away"}
           />
 
           <div className="flex flex-col items-center justify-center pt-2">
@@ -510,9 +714,14 @@ function FeaturedMatch({
                 {liveHome}<span className="px-1 text-white/50">-</span>{liveAway}
               </div>
             ) : showFinal ? (
-              <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
-                {finalScore![0]}<span className="px-1 text-white/50">-</span>{finalScore![1]}
-              </div>
+              <>
+                <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
+                  {finalScore![0]}<span className="px-1 text-white/50">-</span>{finalScore![1]}
+                </div>
+                <div className="mt-1 text-[11px] font-medium text-white/70">
+                  {isToday ? t("today.fullTime") : dateLabel}
+                </div>
+              </>
             ) : counting ? (
               <>
                 <div className="text-4xl font-extrabold tabular-nums tracking-tight sm:text-6xl">
@@ -551,6 +760,8 @@ function FeaturedMatch({
             name={teamName(f.away)}
             owner={f.away.id ? owners[f.away.id] : undefined}
             stake={stakeFor?.(f.away.id)}
+            winner={showFinal && winSide === "away"}
+            dim={showFinal && winSide === "home"}
           />
         </div>
 
@@ -566,7 +777,7 @@ function FeaturedMatch({
         )}
 
         {/* Key events — goals, cards, VAR */}
-        {hasDetail && <HeroEvents events={events} live={live ?? null} />}
+        {hasDetail && <HeroEvents events={shownEvents} live={live ?? null} />}
 
         <div className="mt-4 flex flex-col items-center gap-0.5 text-center text-xs text-white/75">
           {(f.stadium || f.venue) && (
@@ -608,21 +819,27 @@ function FeaturedMatch({
                 </div>
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => setStatsOpen((o) => !o)}
-              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-white"
-            >
-              <BarChart3 className="h-4 w-4" /> {t("stats.title")}
-              <span className="ml-auto text-base text-white/70">
-                {statsOpen ? "−" : "+"}
-              </span>
-            </button>
-            {statsOpen && (
+            {showFinal ? (
+              <div className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white">
+                <BarChart3 className="h-4 w-4" /> {t("stats.final")}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setStatsOpen((o) => !o)}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-white"
+              >
+                <BarChart3 className="h-4 w-4" /> {t("stats.title")}
+                <span className="ml-auto text-base text-white/70">
+                  {statsOpen ? "−" : "+"}
+                </span>
+              </button>
+            )}
+            {(statsOpen || showFinal) && (
               <div className="space-y-2 px-4 pb-3">
-                {!stats ? (
+                {!shownStats ? (
                   <div className="h-16 animate-pulse rounded bg-white/10" />
-                ) : stats.length === 0 ? (
+                ) : shownStats.length === 0 ? (
                   <p className="py-2 text-center text-sm text-white/70">
                     {t("stats.none")}
                   </p>
@@ -632,7 +849,7 @@ function FeaturedMatch({
                       <span className="truncate">{statHome}</span>
                       <span className="truncate text-right">{statAway}</span>
                     </div>
-                    {stats.map((srow) => (
+                    {shownStats.map((srow) => (
                       <div
                         key={srow.label}
                         className="flex items-center justify-between gap-2 border-b border-white/10 py-1.5 text-sm last:border-0"
@@ -734,17 +951,33 @@ function TeamSide({
   name,
   owner,
   stake,
+  winner = false,
+  dim = false,
 }: {
   id: string | null;
   name: string;
   owner?: string;
   stake?: { points: number; rank: number };
+  winner?: boolean; // emphasise the winning team in a recap
+  dim?: boolean; // de-emphasise the losing team in a recap
 }) {
   const { t } = useT();
   return (
-    <div className="flex flex-col items-center gap-2 text-center">
+    <div
+      className={cn(
+        "flex flex-col items-center gap-2 text-center transition-opacity",
+        dim && "opacity-55",
+      )}
+    >
       {id ? (
-        <TeamCrest teamId={id} size="xl" className="ring-2 ring-white/30" />
+        <TeamCrest
+          teamId={id}
+          size="xl"
+          className={cn(
+            "ring-2",
+            winner ? "ring-gold shadow-[0_0_20px_rgba(212,175,55,0.5)]" : "ring-white/30",
+          )}
+        />
       ) : (
         <span className="grid h-14 w-14 place-items-center rounded-full bg-white/15 text-lg font-bold">
           ?
