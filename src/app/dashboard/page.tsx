@@ -402,15 +402,22 @@ function BootCard({
       <div className="text-[11px] text-muted-foreground">
         {t("home.goalsLeaderSub", { goals: scorer.goals })}
       </div>
-      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2.5">
+      <div className="mt-auto pt-2.5">
         {prize && (
-          <Pill className="bg-gold/20 text-gold-foreground">
+          <div className="text-base font-extrabold tabular-nums">
             {formatMoney(prize.amount, cur)}
-          </Pill>
+          </div>
         )}
-        <Pill className="bg-muted text-muted-foreground">
-          {owner ?? t("prize.tbd")}
-        </Pill>
+        <div className="line-clamp-1 text-[11px] text-muted-foreground">
+          {owner ? (
+            <>
+              <span>{t("prize.winning")}: </span>
+              <span className="font-semibold text-foreground">{owner}</span>
+            </>
+          ) : (
+            t("prize.tbd")
+          )}
+        </div>
       </div>
     </CardShell>
   );
