@@ -30,7 +30,7 @@ export interface SetupConfig {
   playerNames: string[];
 }
 import { fetchResults } from "@/lib/results-sync";
-import { fetchSeasonResults } from "@/lib/live";
+import { fetchSeasonResults, fetchTopScorer } from "@/lib/live";
 import {
   buildPackagesFor,
   createInitialState,
@@ -103,6 +103,8 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
 
   // Tracks the last JSON we wrote/received so realtime echoes don't loop.
   const lastJsonRef = useRef<string>("");
+  // Last top-scorer team we persisted (avoid redundant Golden Boot writes).
+  const lastBootRef = useRef<string | null>(null);
 
   useEffect(() => {
     setSessionId(window.localStorage.getItem(SESSION_KEY));
@@ -374,6 +376,17 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     try {
       // Prefer API-Football (authoritative + fast); fall back to the free feed.
       const data = (await fetchSeasonResults()) ?? (await fetchResults());
+      // Golden Boot: store the top scorer's national team (for the prize). Only
+      // write when it actually changes so we don't churn the shared document.
+      const top = await fetchTopScorer();
+      if (top?.teamId && top.teamId !== lastBootRef.current) {
+        lastBootRef.current = top.teamId;
+        update((prev) =>
+          prev.goldenBootTeamId === top.teamId
+            ? prev
+            : { ...prev, goldenBootTeamId: top.teamId },
+        );
+      }
       if (data) {
         applyAutoResults(data.results);
         setLastSync(Date.now());
@@ -383,7 +396,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSyncing(false);
     }
-  }, [applyAutoResults]);
+  }, [applyAutoResults, update]);
 
   const updateSettings = useCallback(
     (patch: Partial<PoolSettings>) => {

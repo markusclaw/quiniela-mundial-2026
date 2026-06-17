@@ -1,22 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Flame, Crown, Wallet, ArrowRight } from "lucide-react";
+import { Flame, Crown, Wallet, Footprints, ArrowRight } from "lucide-react";
 import { SoccerBall } from "@/components/ui/soccer-ball";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
 import { MatchdayToday } from "@/components/matchday-today";
 import { StandingRow } from "@/components/standing-row";
+import { TeamCrest } from "@/components/team-crest";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney, cn } from "@/lib/utils";
+import { fetchTopScorer, type TopScorer } from "@/lib/live";
 import {
   computeStandings,
   resolvePrizes,
   totalPot,
   amountCollected,
   ownedTeamIds,
+  ownerMap,
   rankStandings,
   teamsAlive,
   type ParticipantStanding,
@@ -71,17 +74,46 @@ function DashboardInner() {
   const championPrize = prizes.find((p) => p.type === "champion");
   const pointsPrize = prizes.find((p) => p.type === "most_points");
   const goalsPrize = prizes.find((p) => p.type === "most_goals");
+  const bootPrize = prizes.find((p) => p.type === "golden_boot");
   const pointsPts = Math.max(0, ...playing.map((s) => s.totalPoints));
   const goalsCount = Math.max(0, ...playing.map((s) => s.totalGoals));
 
   const collected = amountCollected(state);
   const outstanding = Math.max(0, pot - collected);
 
+  // Golden Boot — live tournament top scorer (for the side prize).
+  const DEMO_BOOT = false;
+  const [topScorer, setTopScorer] = useState<TopScorer | null>(null);
+  useEffect(() => {
+    let on = true;
+    const load = () =>
+      fetchTopScorer().then((ts) => {
+        if (!on) return;
+        if (ts) setTopScorer(ts);
+        else if (DEMO_BOOT)
+          setTopScorer({
+            player: "L. Messi",
+            goals: 5,
+            teamName: "Argentina",
+            teamId: "ARG",
+          });
+        // else: keep the last good value (feed hiccup) — do nothing
+      });
+    load();
+    const id = setInterval(load, 3 * 60 * 1000); // refresh every 3 min
+    return () => {
+      on = false;
+      clearInterval(id);
+    };
+  }, []);
+  const owners = useMemo(() => ownerMap(state), [state]);
+  const bootOwner = topScorer?.teamId ? owners[topScorer.teamId] : undefined;
+
   return (
     <div className="space-y-6">
       <MatchdayToday />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
         <PotCard
           pot={pot}
           collected={collected}
@@ -111,6 +143,14 @@ function DashboardInner() {
           prize={goalsPrize}
           cur={cur}
         />
+        {topScorer && (
+          <BootCard
+            scorer={topScorer}
+            owner={bootOwner}
+            prize={bootPrize}
+            cur={cur}
+          />
+        )}
       </div>
 
       <Card className="overflow-hidden">
@@ -328,6 +368,49 @@ function LeaderCard({
             {note === "goals" ? t("tiebreak.goals") : t("tiebreak.tie")}
           </Pill>
         )}
+      </div>
+    </CardShell>
+  );
+}
+
+// Bota de Oro — the tournament's top scorer + who owns their national team.
+function BootCard({
+  scorer,
+  owner,
+  prize,
+  cur,
+}: {
+  scorer: TopScorer;
+  owner?: string;
+  prize: ResolvedPrize | undefined;
+  cur: string;
+}) {
+  const { t } = useT();
+  return (
+    <CardShell
+      icon={Footprints}
+      label={t("prize.golden_boot")}
+      chip="bg-gold/25 text-gold-foreground"
+      accent="border-gold/40 bg-gold/5"
+    >
+      <div className="flex min-w-0 items-center gap-1.5">
+        {scorer.teamId && <TeamCrest teamId={scorer.teamId} size="xs" />}
+        <span className="truncate text-lg font-extrabold leading-tight tracking-tight">
+          {scorer.player}
+        </span>
+      </div>
+      <div className="text-[11px] text-muted-foreground">
+        {t("home.goalsLeaderSub", { goals: scorer.goals })}
+      </div>
+      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2.5">
+        {prize && (
+          <Pill className="bg-gold/20 text-gold-foreground">
+            {formatMoney(prize.amount, cur)}
+          </Pill>
+        )}
+        <Pill className="bg-muted text-muted-foreground">
+          {owner ?? t("prize.tbd")}
+        </Pill>
       </div>
     </CardShell>
   );

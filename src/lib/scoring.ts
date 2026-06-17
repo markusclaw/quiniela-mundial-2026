@@ -58,12 +58,15 @@ export const PAYOUT_PRESETS: Record<PayoutPresetId, PrizeDef[]> = {
     { type: "most_points", pct: 5 / 24 }, // 20.83%
     { type: "most_goals", pct: 5 / 24 }, // 20.83%
   ],
+  // Official structure — at a $2,350 pot these resolve to:
+  // Champion $1,200 · Most points $600 · Most goals $300 · 2nd points $150 ·
+  // Bota de Oro $100. (Champion is the fixed prize; the rest scale with the pot.)
   five: [
-    { type: "champion", pct: 0.45 },
-    { type: "most_points", pct: 0.25 },
-    { type: "most_goals", pct: 0.15 },
-    { type: "runner_up", pct: 0.1 },
-    { type: "third_place", pct: 0.05 },
+    { type: "champion", pct: 1200 / 2350 }, // ≈ 51%
+    { type: "most_points", pct: 600 / 2350 }, // ≈ 26%
+    { type: "most_goals", pct: 300 / 2350 }, // ≈ 13%
+    { type: "second_points", pct: 150 / 2350 }, // ≈ 6%
+    { type: "golden_boot", pct: 100 / 2350 }, // ≈ 4%
   ],
   seven: [
     { type: "champion", pct: 0.4 },
@@ -415,6 +418,30 @@ export function resolvePrizes(state: PoolState): ResolvedPrize[] {
           (st) => st.totalPoints,
           (st) => st.totalGoals,
         );
+      case "second_points": {
+        // The 2nd tier in the points standings (points, then goals). Ties at
+        // 2nd split; only counts once someone is actually behind a positive
+        // leader.
+        const ranked = base
+          .filter((st) => st.totalPoints > 0)
+          .sort(
+            (a, b) => b.totalPoints - a.totalPoints || b.totalGoals - a.totalGoals,
+          );
+        if (!ranked.length) return [];
+        const key = (st: ParticipantTotal) => `${st.totalPoints}|${st.totalGoals}`;
+        const topKey = key(ranked[0]);
+        const second = ranked.find((st) => key(st) !== topKey);
+        if (!second) return [];
+        const secondKey = key(second);
+        return ranked
+          .filter((st) => key(st) === secondKey)
+          .map((st) => st.participant.id);
+      }
+      case "golden_boot": {
+        const teamId = state.goldenBootTeamId;
+        const id = teamId ? ownerOfTeamId(state, teamId) : null;
+        return id ? [id] : [];
+      }
       case "most_goals":
         return leadersWithTiebreak(
           base,

@@ -80,6 +80,7 @@ export function createInitialState(): PoolState {
     packages: buildPackagesFor(DEFAULT_SETTINGS),
     results: freshResults(),
     teamOwners: {},
+    goldenBootTeamId: null,
   };
 }
 
@@ -121,6 +122,7 @@ export function migrateState(s: PoolState): PoolState {
   // Default the champion to a flat $1,200 (organizer can change in Admin).
   if (scoring && scoring.championFixed === undefined) scoring.championFixed = 1200;
   if (scoring) delete scoring.pool;
+  if (s.goldenBootTeamId === undefined) s.goldenBootTeamId = null;
   // Always re-assert the organizer PIN so login works on any saved pool.
   const mod = s.participants?.find((p) => p.isModerator);
   if (mod) mod.pin = ORGANIZER_PIN;

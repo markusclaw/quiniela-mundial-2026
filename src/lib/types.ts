@@ -44,8 +44,10 @@ export type PrizeType =
   | "third_place"
   | "fourth_place"
   | "most_points"
+  | "second_points" // 2nd place in the points standings
   | "most_goals"
-  | "survival";
+  | "survival"
+  | "golden_boot"; // owner of the tournament top scorer's team
 
 // Per-team live result (auto-synced from the web, or set by the moderator)
 export interface TeamResult {
@@ -122,4 +124,5 @@ export interface PoolState {
   packages: Package[];
   results: Record<string, TeamResult>; // by teamId
   teamOwners: Record<string, string>; // teamId -> participantId (individual mode)
+  goldenBootTeamId?: string | null; // national team of the current top scorer
 }

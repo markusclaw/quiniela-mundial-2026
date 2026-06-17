@@ -1,6 +1,6 @@
 "use client";
 
-import { Trophy, Flame, Crown, Medal, ShieldCheck } from "lucide-react";
+import { Trophy, Flame, Crown, Medal, ShieldCheck, Footprints } from "lucide-react";
 import { SoccerBall } from "@/components/ui/soccer-ball";
 import { PublicShell } from "@/components/require-auth";
 import { usePool } from "@/components/pool-provider";
@@ -18,8 +18,10 @@ const PRIZE_ICON: Record<PrizeType, React.ElementType> = {
   third_place: Medal,
   fourth_place: Medal,
   most_points: Flame,
+  second_points: Flame,
   most_goals: SoccerBall,
   survival: ShieldCheck,
+  golden_boot: Footprints,
 };
 
 function RulesInner() {

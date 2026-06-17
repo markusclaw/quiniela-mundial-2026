@@ -39,6 +39,9 @@ export default {
       const fixture = url.searchParams.get("fixture");
       if (!fixture) return json({ error: "fixture required" }, 400);
       path = `/fixtures/events?fixture=${encodeURIComponent(fixture)}`;
+    } else if (url.pathname === "/topscorers") {
+      // Tournament Golden Boot race (individual top scorers).
+      path = `/players/topscorers?league=${LEAGUE}&season=${SEASON}`;
     } else if (url.searchParams.get("all")) {
       // Every World Cup fixture this season (for standings/points). The app
       // derives results from this so points update the instant a match ends.

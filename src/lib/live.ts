@@ -276,3 +276,42 @@ export async function fetchEvents(fixtureId: number): Promise<MatchEvent[]> {
     return [];
   }
 }
+
+// ── Golden Boot (tournament top scorer) ──────────────────────────────────────
+
+export interface TopScorer {
+  player: string;
+  goals: number;
+  teamName: string; // national team name from the feed
+  teamId: string | null; // mapped to our internal team id (owner lookup)
+}
+
+interface AfTopScorer {
+  player?: { name?: string };
+  statistics?: { team?: { name?: string }; goals?: { total?: number | null } }[];
+}
+
+/** The tournament's leading scorer (the Bota de Oro race), or null. */
+export async function fetchTopScorer(): Promise<TopScorer | null> {
+  if (!BASE) return null;
+  try {
+    const res = await fetch(`${BASE.replace(/\/$/, "")}/topscorers`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { response?: AfTopScorer[] };
+    if (hasApiError(json)) return null;
+    const top = json.response?.[0];
+    const stat = top?.statistics?.[0];
+    if (!top || !stat) return null;
+    const teamName = stat.team?.name ?? "";
+    return {
+      player: top.player?.name ?? "",
+      goals: stat.goals?.total ?? 0,
+      teamName,
+      teamId: teamIdFromName(teamName),
+    };
+  } catch {
+    return null;
+  }
+}

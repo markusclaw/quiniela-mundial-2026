@@ -66,11 +66,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex shrink-0 items-center gap-2">
             <SyncIndicator className="hidden sm:inline-flex" />
             <LangToggle />
-            {me?.isModerator && (
-              <span className="hidden text-sm text-muted-foreground sm:inline">
-                {me.name}
-              </span>
-            )}
             {/* Subtle organizer entry */}
             <Link
               href="/admin"

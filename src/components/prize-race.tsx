@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Crown, Flame, Medal, ShieldCheck } from "lucide-react";
+import { Crown, Flame, Medal, ShieldCheck, Footprints } from "lucide-react";
 import { SoccerBall } from "@/components/ui/soccer-ball";
 import { usePool } from "@/components/pool-provider";
 import { useT } from "@/lib/i18n";
@@ -17,8 +17,10 @@ const PRIZE_ICON: Record<PrizeType, React.ElementType> = {
   third_place: Medal,
   fourth_place: Medal,
   most_points: Flame,
+  second_points: Flame,
   most_goals: SoccerBall,
   survival: ShieldCheck,
+  golden_boot: Footprints,
 };
 
 /** Live "Premios en juego" — one row per active-preset prize. */
