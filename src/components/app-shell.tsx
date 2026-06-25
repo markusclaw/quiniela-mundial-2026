@@ -8,6 +8,7 @@ import {
   CalendarDays,
   LayoutGrid,
   ListOrdered,
+  Network,
   Settings,
   LogOut,
   BookOpen,
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/dashboard", key: "nav.home", icon: Home },
   { href: "/leaderboard", key: "nav.table", icon: Trophy },
   { href: "/groups", key: "nav.groups", icon: ListOrdered },
+  { href: "/bracket", key: "nav.bracket", icon: Network },
   { href: "/fixtures", key: "nav.fixtures", icon: CalendarDays },
   { href: "/draw", key: "nav.packs", icon: LayoutGrid },
   { href: "/rules", key: "nav.rules", icon: BookOpen },
@@ -97,7 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="container animate-fade-up py-6">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:hidden">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {NAV.map((item) => (
             <BottomLink
               key={item.href}

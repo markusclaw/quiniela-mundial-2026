@@ -109,6 +109,43 @@
   scrollbar-width: none;
 }
 
+/* ── Knockout bracket tree connectors ───────────────────────────────────────
+   Each column is a flex box; its matches all take an equal vertical slot
+   (flex: 1), so a later round's match lands exactly centred between the two
+   that feed it. The elbow lines are drawn with borders: the top match of each
+   pair draws a "⊐" to the right, and every match past round one draws a short
+   line in from the left. The column gap (3rem) = box (1.5rem) + stub (1.5rem). */
+.bk-col {
+  display: flex;
+  flex-direction: column;
+}
+.bk-item {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+}
+.bk-col:not(:last-child) .bk-item:nth-child(odd)::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: 1.5rem;
+  height: 100%;
+  border: 2px solid hsl(var(--border));
+  border-left: 0;
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+.bk-col:not(:first-child) .bk-item::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 1.5rem;
+  border-top: 2px solid hsl(var(--border));
+}
+
 /* Print: draw slips on a clean letter page */
 @page {
   size: letter;
