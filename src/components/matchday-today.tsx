@@ -264,6 +264,10 @@ export function MatchdayToday() {
     let concurrent: FixtureLite[];
     if (liveOnes.length && liveOnes.includes(h)) {
       concurrent = [...liveOnes].sort((a, b) => prominence(b) - prominence(a));
+    } else if (recentlyFinished.includes(h)) {
+      // Two+ matches just finished — surface every recap as a chip so you can
+      // flip between the final scores (already most-recent-first).
+      concurrent = recentlyFinished;
     } else if (upcoming.includes(h) && h.kickoff != null) {
       concurrent = upcoming
         .filter((f) => f.kickoff === h!.kickoff)
@@ -313,7 +317,7 @@ export function MatchdayToday() {
       <FeaturedMatch
         fixture={featured}
         isToday={featured.date === todayStr}
-        recap={heroRecap && featured === hero}
+        recap={heroRecap}
         owners={owners}
         loc={loc}
         live={heroLive}
@@ -465,16 +469,23 @@ function SwitcherChips({
         const lm = findLiveFor(live, f.home.id, f.away.id);
         const same = lm ? lm.homeId === f.home.id : true;
         const isLive = !!lm && lm.inPlay;
-        const mid = isLive
-          ? `${same ? lm!.homeGoals : lm!.awayGoals}-${same ? lm!.awayGoals : lm!.homeGoals}`
-          : f.score
-            ? `${f.score[0]}-${f.score[1]}`
-            : f.kickoff != null
-              ? new Date(f.kickoff).toLocaleTimeString(loc, {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })
-              : t("today.vs");
+        // Score from the API (live OR finished), else the free-feed final.
+        const apiScore =
+          lm && (lm.inPlay || lm.finished)
+            ? ([
+                same ? lm.homeGoals : lm.awayGoals,
+                same ? lm.awayGoals : lm.homeGoals,
+              ] as [number, number])
+            : null;
+        const score = apiScore ?? f.score;
+        const mid = score
+          ? `${score[0]}-${score[1]}`
+          : f.kickoff != null
+            ? new Date(f.kickoff).toLocaleTimeString(loc, {
+                hour: "numeric",
+                minute: "2-digit",
+              })
+            : t("today.vs");
         return (
           <button
             key={key}
