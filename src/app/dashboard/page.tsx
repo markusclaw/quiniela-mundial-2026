@@ -113,13 +113,16 @@ function DashboardInner() {
     <div className="space-y-6">
       <MatchdayToday />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-        <PotCard
-          pot={pot}
-          collected={collected}
-          outstanding={outstanding}
-          cur={cur}
-        />
+      {/* Pot — full-width headline banner */}
+      <PotCard
+        pot={pot}
+        collected={collected}
+        outstanding={outstanding}
+        cur={cur}
+      />
+
+      {/* Prize cards — even 2×2 on mobile, 4 across on desktop */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <ChampionCard prize={championPrize} cur={cur} />
         <LeaderCard
           icon={Flame}
@@ -264,27 +267,39 @@ function PotCard({
   const { t } = useT();
   const pct = pot > 0 ? Math.min(100, Math.round((collected / pot) * 100)) : 0;
   return (
-    <CardShell
-      icon={Wallet}
-      label={t("home.pot")}
-      chip="bg-primary/15 text-primary"
-      accent="border-primary/30 bg-primary/5"
-    >
-      <div className="truncate text-2xl font-extrabold tracking-tight">
-        {formatMoney(pot, cur)}
-      </div>
-      <div className="mt-auto pt-2.5">
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${pct}%` }}
-          />
+    <Card className="overflow-hidden border-primary/30 bg-primary/5">
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
+              <Wallet className="h-4 w-4" />
+            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("home.pot")}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-3xl font-extrabold tracking-tight">
+            {formatMoney(pot, cur)}
+          </div>
         </div>
-        <div className="mt-1.5 text-[11px] text-muted-foreground">
-          {formatMoney(outstanding, cur)} {t("home.owed")}
+        <div className="w-full sm:max-w-xs">
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>
+              {formatMoney(collected, cur)} {t("home.collected")}
+            </span>
+            <span>
+              {formatMoney(outstanding, cur)} {t("home.owed")}
+            </span>
+          </div>
         </div>
-      </div>
-    </CardShell>
+      </CardContent>
+    </Card>
   );
 }
 

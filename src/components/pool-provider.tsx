@@ -123,10 +123,13 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
       // Attach the realtime listener synchronously so cleanup always tears it
       // down (React dev mounts effects twice).
       const unsub = subscribeRemote((incoming) => {
-        const json = JSON.stringify(incoming);
+        // Compare the MIGRATED shape (same normalisation we store in
+        // lastJsonRef) so a device's own echo is actually suppressed.
+        const migrated = migrateState(incoming);
+        const json = JSON.stringify(migrated);
         if (json === lastJsonRef.current) return; // ignore our own echo
         lastJsonRef.current = json;
-        setStateRaw(migrateState(incoming));
+        setStateRaw(migrated);
       });
       loadRemote()
         .then((raw) => {
@@ -158,6 +161,10 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
   const update = useCallback((fn: (prev: PoolState) => PoolState) => {
     setStateRaw((prev) => {
       const next = fn(prev);
+      // A mutation that changed nothing (e.g. periodic auto-sync with no new
+      // results) must not write — that would rewrite the shared document and
+      // echo to every device for no reason, which looked like points "glitching".
+      if (next === prev) return prev;
       if (isSupabaseEnabled) {
         saveRemoteMutation(fn, next);
       } else {
