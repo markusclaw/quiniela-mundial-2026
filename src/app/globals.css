@@ -122,6 +122,7 @@
 .bk-item {
   position: relative;
   flex: 1 1 0;
+  min-height: 0; /* force exactly equal slots so the elbows line up */
   display: flex;
   align-items: center;
 }

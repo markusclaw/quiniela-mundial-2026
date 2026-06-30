@@ -10,43 +10,38 @@ import { cn } from "@/lib/utils";
 import { getTeam } from "@/lib/data/teams";
 import { ownerMap, teamPoints } from "@/lib/scoring";
 import { fetchFixtures, type FixtureLite } from "@/lib/results-sync";
-import type { PoolState, ScoringConfig } from "@/lib/types";
+import type { ScoringConfig } from "@/lib/types";
 
 type RoundKey = "r32" | "r16" | "qf" | "sf" | "final";
-// Rounds that form the connected tree (third-place is shown on its own).
+
+// Fixed WC2026 bracket topology (openfootball match numbers). Each round's
+// matches are listed in tree order so adjacent pairs feed the next round in
+// order — which is what makes the connector lines line up.
+const ROUND_NUMS: Record<RoundKey, number[]> = {
+  r32: [74, 77, 73, 75, 76, 78, 79, 80, 83, 84, 81, 82, 86, 88, 85, 87],
+  r16: [89, 90, 91, 92, 93, 94, 95, 96],
+  qf: [97, 98, 99, 100],
+  sf: [101, 102],
+  final: [], // the final has no match number; resolved from its W101/W102 slots
+};
 const TREE_ORDER: RoundKey[] = ["r32", "r16", "qf", "sf", "final"];
 
-const COL_W = 184; // px — column width
-const SLOT = 78; // px — vertical slot per first-round match (card + gap)
+const COL_W = 184;
+const SLOT = 96;
 
-function roundOf(label: string): RoundKey | "third" | null {
-  const r = label.toLowerCase();
-  if (/3rd place|third place|play-?off for third/.test(r)) return "third";
-  if (/round of 32/.test(r)) return "r32";
-  if (/round of 16/.test(r)) return "r16";
-  if (/quarter/.test(r)) return "qf";
-  if (/semi/.test(r)) return "sf";
-  if (/final/.test(r)) return "final";
-  return null;
-}
+type Side = { id: string | null; name: string | null };
+const TBD: Side = { id: null, name: null };
 
 function roundPoints(round: RoundKey, s: ScoringConfig): number {
-  switch (round) {
-    case "r32":
-      return s.advance;
-    case "r16":
-      return s.r16;
-    case "qf":
-      return s.qf;
-    case "sf":
-      return s.sf;
-    case "final":
-      return s.final;
-  }
-}
-
-function teamName(side: { id: string | null; name: string }) {
-  return side.id ? getTeam(side.id)?.name ?? side.name : side.name;
+  return round === "r32"
+    ? s.advance
+    : round === "r16"
+      ? s.r16
+      : round === "qf"
+        ? s.qf
+        : round === "sf"
+          ? s.sf
+          : s.final;
 }
 
 function BracketInner() {
@@ -66,37 +61,109 @@ function BracketInner() {
   }, []);
 
   const owners = useMemo(() => ownerMap(state), [state]);
-  // A team's accumulated tournament points (same value as the standings table).
   const ptsFor = (id: string | null): number | null => {
     if (!id) return null;
     const r = state.results[id];
     return r ? teamPoints(r, state.scoring).total : null;
   };
 
-  const { tree, third } = useMemo(() => {
-    const byRound: Record<RoundKey, FixtureLite[]> = {
-      r32: [],
-      r16: [],
-      qf: [],
-      sf: [],
-      final: [],
+  // Resolve the whole bracket: every "W{n}" / "L{n}" slot is replaced by the
+  // actual winner/loser we compute from match results — so a team advances the
+  // instant its match is decided, without waiting for the data feed to relabel.
+  const resolver = useMemo(() => {
+    const ko = (fixtures ?? []).filter((f) => f.isKnockout);
+    const byNum = new Map<number, FixtureLite>();
+    for (const f of ko) if (f.num != null) byNum.set(f.num, f);
+    const finalMatch = ko.find((f) => /final/i.test(f.label) && !/3rd|third/i.test(f.label) && f.num == null) ?? null;
+    const thirdMatch = ko.find((f) => /3rd place|third place|play-?off for third/i.test(f.label)) ?? null;
+
+    const wCache = new Map<number, Side | null>();
+    const lCache = new Map<number, Side | null>();
+
+    const decisive = (f: FixtureLite): "home" | "away" | null => {
+      if (f.pens) return f.pens[0] > f.pens[1] ? "home" : f.pens[1] > f.pens[0] ? "away" : null;
+      if (f.score) return f.score[0] > f.score[1] ? "home" : f.score[1] > f.score[0] ? "away" : null;
+      return null;
     };
-    let thirdMatch: FixtureLite | null = null;
-    for (const f of fixtures ?? []) {
-      if (!f.isKnockout) continue;
-      const r = roundOf(f.label);
-      if (r === "third") thirdMatch = f;
-      else if (r) byRound[r].push(f);
+    const resolveSide = (raw: { id: string | null; name: string }): Side => {
+      if (raw.id) return { id: raw.id, name: getTeam(raw.id)?.name ?? raw.name };
+      const w = /^W(\d+)$/i.exec(raw.name);
+      if (w) return winnerOf(Number(w[1])) ?? TBD;
+      const l = /^L(\d+)$/i.exec(raw.name);
+      if (l) return loserOf(Number(l[1])) ?? TBD;
+      // Group-position slot like "2A" / "3A/B/C/D/F" — show the raw hint.
+      return { id: null, name: raw.name || null };
+    };
+    function endsOf(num: number): { home: Side; away: Side; f: FixtureLite } | null {
+      const f = byNum.get(num);
+      if (!f) return null;
+      return { home: resolveSide(f.home), away: resolveSide(f.away), f };
     }
-    for (const k of TREE_ORDER) {
-      byRound[k].sort((a, b) => (a.kickoff ?? 0) - (b.kickoff ?? 0));
+    function winnerOf(num: number): Side | null {
+      if (wCache.has(num)) return wCache.get(num)!;
+      wCache.set(num, null); // cycle guard
+      const e = endsOf(num);
+      let res: Side | null = null;
+      if (e) {
+        const d = decisive(e.f);
+        if (d) res = d === "home" ? e.home : e.away;
+        if (res && res.id == null) res = null;
+      }
+      wCache.set(num, res);
+      return res;
     }
-    return { tree: byRound, third: thirdMatch };
+    function loserOf(num: number): Side | null {
+      if (lCache.has(num)) return lCache.get(num)!;
+      lCache.set(num, null);
+      const e = endsOf(num);
+      let res: Side | null = null;
+      if (e) {
+        const d = decisive(e.f);
+        if (d) res = d === "home" ? e.away : e.home;
+        if (res && res.id == null) res = null;
+      }
+      lCache.set(num, res);
+      return res;
+    }
+
+    type Box = { home: Side; away: Side; f: FixtureLite | null };
+    const boxesFor = (round: RoundKey): Box[] => {
+      if (round === "final") {
+        if (!finalMatch) return [];
+        return [
+          {
+            home: resolveSide(finalMatch.home),
+            away: resolveSide(finalMatch.away),
+            f: finalMatch,
+          },
+        ];
+      }
+      return ROUND_NUMS[round].map((num) => {
+        const f = byNum.get(num) ?? null;
+        return {
+          home: f ? resolveSide(f.home) : TBD,
+          away: f ? resolveSide(f.away) : TBD,
+          f,
+        };
+      });
+    };
+
+    const third: Box | null = thirdMatch
+      ? {
+          home: resolveSide(thirdMatch.home),
+          away: resolveSide(thirdMatch.away),
+          f: thirdMatch,
+        }
+      : null;
+
+    const hasAny = ko.length > 0;
+    return { boxesFor, third, hasAny };
   }, [fixtures]);
 
-  const treeRounds = TREE_ORDER.filter((k) => tree[k].length > 0);
-  const boardHeight = treeRounds.length ? tree[treeRounds[0]].length * SLOT : 0;
-  const isEmpty = treeRounds.length === 0 && !third;
+  const treeRounds = resolver.hasAny ? TREE_ORDER.filter((r) => resolver.boxesFor(r).length > 0) : [];
+  const boardHeight = treeRounds.length
+    ? resolver.boxesFor(treeRounds[0]).length * SLOT
+    : 0;
 
   return (
     <div className="space-y-5">
@@ -110,14 +177,13 @@ function BracketInner() {
 
       {loading ? (
         <div className="h-40 animate-pulse rounded-xl bg-muted" />
-      ) : isEmpty ? (
+      ) : !resolver.hasAny ? (
         <p className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
           {t("bracket.empty")}
         </p>
       ) : (
         <div className="overflow-x-auto pb-3 no-scrollbar">
           <div className="w-max">
-            {/* round headers, aligned to the columns below */}
             <div className="mb-2 flex gap-12">
               {treeRounds.map((round) => (
                 <div
@@ -133,26 +199,22 @@ function BracketInner() {
               ))}
             </div>
 
-            {/* the connected tree */}
             <div className="flex gap-12" style={{ height: boardHeight }}>
               {treeRounds.map((round) => (
                 <div key={round} className="bk-col shrink-0" style={{ width: COL_W }}>
-                  {tree[round].map((f, i) => (
+                  {resolver.boxesFor(round).map((box, i) => (
                     <div key={i} className="bk-item">
-                      <MatchupCard f={f} owners={owners} ptsFor={ptsFor} />
+                      <MatchupCard box={box} ptsFor={ptsFor} owners={owners} />
                     </div>
                   ))}
                 </div>
               ))}
             </div>
 
-            {/* third-place match, shown separately */}
-            {third && (
+            {resolver.third && (
               <div className="mt-6" style={{ width: COL_W }}>
-                <div className="mb-2 px-1 text-sm font-bold">
-                  {t("bracket.third")}
-                </div>
-                <MatchupCard f={third} owners={owners} ptsFor={ptsFor} />
+                <div className="mb-2 px-1 text-sm font-bold">{t("bracket.third")}</div>
+                <MatchupCard box={resolver.third} ptsFor={ptsFor} owners={owners} />
               </div>
             )}
           </div>
@@ -163,33 +225,30 @@ function BracketInner() {
 }
 
 function MatchupCard({
-  f,
-  owners,
+  box,
   ptsFor,
+  owners,
 }: {
-  f: FixtureLite;
-  owners: Record<string, string>;
+  box: { home: Side; away: Side; f: FixtureLite | null };
   ptsFor: (id: string | null) => number | null;
+  owners: Record<string, string>;
 }) {
   const { t } = useT();
-  const score = f.score;
+  const f = box.f;
+  const score = f?.score ?? null;
   const homeWin = !!score && score[0] > score[1];
   const awayWin = !!score && score[1] > score[0];
 
   const label = score
     ? t("today.ft")
-    : f.kickoff
+    : f?.kickoff
       ? new Date(f.kickoff).toLocaleDateString(undefined, {
           month: "short",
           day: "numeric",
         })
-      : "";
+      : t("bracket.tbd");
 
-  const side = (
-    s: { id: string | null; name: string },
-    goals: number | null,
-    win: boolean,
-  ) => {
+  const row = (s: Side, goals: number | null, win: boolean) => {
     const owner = s.id ? owners[s.id] : undefined;
     const pts = ptsFor(s.id);
     return (
@@ -202,8 +261,13 @@ function MatchupCard({
           </span>
         )}
         <span className="min-w-0 flex-1 leading-none">
-          <span className="block truncate text-xs font-semibold">
-            {s.id ? teamName(s) : t("bracket.tbd")}
+          <span
+            className={cn(
+              "block truncate text-xs font-semibold",
+              !s.id && "text-muted-foreground",
+            )}
+          >
+            {s.id ? getTeam(s.id)?.name ?? s.name : s.name ?? t("bracket.tbd")}
           </span>
           {owner && (
             <span className="mt-0.5 block truncate text-[9px] text-muted-foreground">
@@ -230,8 +294,8 @@ function MatchupCard({
         {label}
       </div>
       <div className="space-y-1">
-        {side(f.home, score ? score[0] : null, homeWin)}
-        {side(f.away, score ? score[1] : null, awayWin)}
+        {row(box.home, score ? score[0] : null, homeWin)}
+        {row(box.away, score ? score[1] : null, awayWin)}
       </div>
     </div>
   );

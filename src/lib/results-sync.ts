@@ -357,11 +357,13 @@ export interface FixtureLite {
   kickoff: number | null; // epoch ms, or null if time unparseable
   label: string; // group ("Group A") or knockout round
   isKnockout: boolean;
+  num?: number; // knockout match number (e.g. 73) — used to wire the bracket
   venue: string; // host city/metro (from the feed)
   stadium: string; // stadium name (mapped from the city)
   home: { id: string | null; name: string };
   away: { id: string | null; name: string };
   score: [number, number] | null;
+  pens: [number, number] | null; // penalty shootout result, if any
   played: boolean;
 }
 
@@ -411,16 +413,19 @@ export function parseFixtures(matches: RawMatch[]): FixtureLite[] {
   return matches
     .map((m): FixtureLite => {
       const score = getScore(m);
+      const p = m.score?.p;
       return {
         date: m.date ?? "",
         kickoff: parseKickoff(m.date, m.time),
         label: m.group ?? m.round ?? "",
         isKnockout: !m.group,
+        num: m.num,
         venue: m.ground ?? "",
         stadium: STADIUM_BY_CITY[m.ground ?? ""] ?? "",
         home: { id: toId(m.team1), name: displayName(m.team1) },
         away: { id: toId(m.team2), name: displayName(m.team2) },
         score,
+        pens: Array.isArray(p) && p.length === 2 ? [p[0], p[1]] : null,
         played: !!score,
       };
     })
