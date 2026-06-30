@@ -74,7 +74,7 @@ function BracketInner() {
     const ko = (fixtures ?? []).filter((f) => f.isKnockout);
     const byNum = new Map<number, FixtureLite>();
     for (const f of ko) if (f.num != null) byNum.set(f.num, f);
-    const finalMatch = ko.find((f) => /final/i.test(f.label) && !/3rd|third/i.test(f.label) && f.num == null) ?? null;
+    const finalMatch = ko.find((f) => /^final$/i.test(f.label.trim())) ?? null;
     const thirdMatch = ko.find((f) => /3rd place|third place|play-?off for third/i.test(f.label)) ?? null;
 
     const wCache = new Map<number, Side | null>();
