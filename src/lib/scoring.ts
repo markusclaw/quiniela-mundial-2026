@@ -147,6 +147,50 @@ export function teamPoints(
   };
 }
 
+/** Knockout stages that award points, in the order they're reached. */
+export const KO_STAGES = ["r32", "r16", "qf", "sf", "final", "champion"] as const;
+export type KoStage = (typeof KO_STAGES)[number];
+
+/**
+ * Points a team earned at each individual knockout stage, decomposed so the
+ * values sum EXACTLY to its knockoutPoints.
+ *
+ * The underdog multiplier applies to the running knockout total and is rounded
+ * once (see teamPoints), so each stage's share is the delta of the rounded
+ * running total. Rounding each stage independently would not add up — e.g. a
+ * Pot-3 team reaching the QF would render 8+12+20=40 against a real total of 39.
+ * Stages the team never reached are null.
+ */
+export function knockoutStagePoints(
+  result: TeamResult,
+  scoring: ScoringConfig,
+): Record<KoStage, number | null> {
+  const team = getTeam(result.teamId);
+  const mult = team && team.pot >= 3 ? scoring.underdogMultiplier : 1;
+  const milestone: Record<KoStage, number> = {
+    r32: scoring.advance,
+    r16: scoring.r16,
+    qf: scoring.qf,
+    sf: scoring.sf,
+    final: scoring.final,
+    champion: scoring.champion,
+  };
+  const out = {} as Record<KoStage, number | null>;
+  let raw = 0;
+  let prevRounded = 0;
+  KO_STAGES.forEach((st) => {
+    if (!reachedAtLeast(result.stageReached, st)) {
+      out[st] = null;
+      return;
+    }
+    raw += milestone[st];
+    const rounded = Math.round(raw * mult);
+    out[st] = rounded - prevRounded;
+    prevRounded = rounded;
+  });
+  return out;
+}
+
 export interface ParticipantStanding {
   participant: Participant;
   teamBreakdowns: TeamPointsBreakdown[];

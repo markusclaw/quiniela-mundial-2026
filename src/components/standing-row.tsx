@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   ownedTeamIds,
   isTeamEliminated,
+  knockoutStagePoints,
+  KO_STAGES,
   type ParticipantStanding,
 } from "@/lib/scoring";
 import { getTeam } from "@/lib/data/teams";
@@ -69,6 +71,7 @@ export function StandingRow({
   bare = false,
   alive,
   owned,
+  detailed = false,
 }: {
   s: ParticipantStanding;
   rank: number;
@@ -76,6 +79,7 @@ export function StandingRow({
   bare?: boolean; // render without a Card wrapper (for a shared single card)
   alive?: number; // teams still in the knockouts
   owned?: number; // total teams owned
+  detailed?: boolean; // full view: group record + goals alongside the points ledger
 }) {
   const { state } = usePool();
   const { t } = useT();
@@ -155,23 +159,42 @@ export function StandingRow({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full table-fixed text-sm">
+              {/* Points ledger: group points + the points won at each knockout
+                  round, always adding up to the Pts total. `detailed` (the
+                  leaderboard) also shows the group record + goals. */}
+              <table
+                className={cn(
+                  "w-full text-sm",
+                  detailed ? "min-w-[760px]" : "min-w-[520px]",
+                )}
+              >
                 <thead>
                   <tr className="border-b text-[10px] uppercase tracking-wide text-muted-foreground">
                     <th className="px-3 py-1.5 text-left font-semibold">
                       {t("tbl.team")}
                     </th>
-                    <th className={numTh}>{t("tbl.mp")}</th>
-                    <th className={numTh}>{t("tbl.w")}</th>
-                    <th className={numTh}>{t("tbl.d")}</th>
-                    <th className={numTh}>{t("tbl.l")}</th>
-                    <th className={cn(numTh, "hidden sm:table-cell")}>
-                      {t("tbl.gf")}
+                    <th className="px-1 py-1.5 text-center font-semibold">
+                      {t("tbl.stage")}
                     </th>
-                    <th className={cn(numTh, "hidden sm:table-cell")}>
-                      {t("tbl.ga")}
+                    {detailed && (
+                      <>
+                        <th className={numTh}>{t("tbl.mp")}</th>
+                        <th className={numTh}>{t("tbl.w")}</th>
+                        <th className={numTh}>{t("tbl.d")}</th>
+                        <th className={numTh}>{t("tbl.l")}</th>
+                        <th className={numTh}>{t("tbl.gf")}</th>
+                        <th className={numTh}>{t("tbl.ga")}</th>
+                        <th className={numTh}>{t("tbl.gd")}</th>
+                      </>
+                    )}
+                    <th className={cn(numTh, detailed && "border-l")}>
+                      {t("tbl.grp")}
                     </th>
-                    <th className={numTh}>{t("tbl.gd")}</th>
+                    {KO_STAGES.map((st) => (
+                      <th key={st} className={numTh}>
+                        {t(`stageShort.${st}`)}
+                      </th>
+                    ))}
                     <th className="w-10 px-1 py-1.5 text-center font-bold">
                       {t("tbl.pts")}
                     </th>
@@ -180,13 +203,14 @@ export function StandingRow({
                 <tbody>
                   {s.teamBreakdowns.map((b) => {
                     const r = state.results[b.teamId];
+                    const out = isTeamEliminated(r);
+                    const ko = r ? knockoutStagePoints(r, state.scoring) : null;
                     const w = r?.groupWins ?? 0;
                     const d = r?.groupDraws ?? 0;
                     const l = r?.groupLosses ?? 0;
                     const gf = r?.groupGoalsFor ?? 0;
                     const ga = r?.groupGoalsAgainst ?? 0;
                     const gd = gf - ga;
-                    const out = isTeamEliminated(r);
                     return (
                       <tr
                         key={b.teamId}
@@ -196,41 +220,54 @@ export function StandingRow({
                         )}
                       >
                         <td className="py-1.5 pl-3 pr-2">
-                          <div className="flex min-w-0 items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-1.5">
                             <TeamCrest teamId={b.teamId} size="xs" />
-                            <div className="min-w-0">
-                              <span className="block truncate text-sm font-medium leading-tight">
-                                {getTeam(b.teamId)?.name}
+                            <span className="truncate text-sm font-medium">
+                              {getTeam(b.teamId)?.name}
+                            </span>
+                            {b.multiplierApplied && (
+                              <span
+                                title={t("lb.underdogTip")}
+                                className="shrink-0 rounded bg-amber-500/15 px-1 text-[9px] font-bold text-amber-600"
+                              >
+                                ×{state.scoring.underdogMultiplier}
                               </span>
-                              <div className="mt-0.5 flex items-center gap-1">
-                                <StageChip r={r} />
-                                <span className="text-[10px] tabular-nums text-muted-foreground">
-                                  {t("lb.ptsSplit", {
-                                    g: b.groupPoints,
-                                    k: b.knockoutPoints,
-                                  })}
-                                </span>
-                                {b.multiplierApplied && (
-                                  <span
-                                    title={t("lb.underdogTip")}
-                                    className="rounded bg-amber-500/15 px-1 text-[9px] font-bold text-amber-600"
-                                  >
-                                    ×{state.scoring.underdogMultiplier}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                            )}
                           </div>
                         </td>
-                        <td className={numTd}>{w + d + l}</td>
-                        <td className={numTd}>{w}</td>
-                        <td className={numTd}>{d}</td>
-                        <td className={numTd}>{l}</td>
-                        <td className={cn(numTd, "hidden sm:table-cell")}>{gf}</td>
-                        <td className={cn(numTd, "hidden sm:table-cell")}>{ga}</td>
-                        <td className={cn(numTd, gd > 0 && "text-primary")}>
-                          {gd > 0 ? `+${gd}` : gd}
+                        <td className="px-1 py-1.5 text-center">
+                          <StageChip r={r} />
                         </td>
+                        {detailed && (
+                          <>
+                            <td className={numTd}>{w + d + l}</td>
+                            <td className={numTd}>{w}</td>
+                            <td className={numTd}>{d}</td>
+                            <td className={numTd}>{l}</td>
+                            <td className={numTd}>{gf}</td>
+                            <td className={numTd}>{ga}</td>
+                            <td className={cn(numTd, gd > 0 && "text-primary")}>
+                              {gd > 0 ? `+${gd}` : gd}
+                            </td>
+                          </>
+                        )}
+                        <td className={cn(numTd, detailed && "border-l")}>
+                          {b.groupPoints}
+                        </td>
+                        {KO_STAGES.map((st) => {
+                          const v = ko ? ko[st] : null;
+                          return (
+                            <td key={st} className={numTd}>
+                              {v == null ? (
+                                <span className="text-muted-foreground/40">—</span>
+                              ) : (
+                                <span className="font-semibold text-primary">
+                                  {v}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                         <td className="w-10 px-1 py-1.5 text-center font-extrabold tabular-nums">
                           {b.total}
                         </td>
