@@ -313,10 +313,10 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
 
   // Flag knockout losers as eliminated (the champion is never eliminated, even
   // if the feed's Final row is momentarily ambiguous).
-  for (const id of eliminatedIds) {
+  eliminatedIds.forEach((id) => {
     const t = out[id];
     if (t && id !== championId) t.eliminated = true;
-  }
+  });
   // Group-stage non-qualifiers are eliminated too (stageReached already set).
   for (const t of Object.values(out)) {
     if (t.stageReached === "eliminated") t.eliminated = true;

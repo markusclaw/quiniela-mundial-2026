@@ -366,6 +366,7 @@ export function PoolProvider({ children }: { children: React.ReactNode }) {
             (next.groupGoalsAgainst ?? 0) !== (cur.groupGoalsAgainst ?? 0) ||
             !!next.thirdPlace !== !!cur.thirdPlace ||
             !!next.fourthPlace !== !!cur.fourthPlace ||
+            !!next.eliminated !== !!cur.eliminated ||
             next.stageReached !== cur.stageReached
           ) {
             results[teamId] = next;
