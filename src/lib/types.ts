@@ -60,7 +60,8 @@ export interface TeamResult {
   groupGoalsAgainst?: number; // group-stage goals against (standings table)
   thirdPlace?: boolean; // won the third-place match
   fourthPlace?: boolean; // lost the third-place match
-  stageReached: Stage; // furthest stage reached / eliminated
+  stageReached: Stage; // furthest stage reached (kept for points, even once out)
+  eliminated?: boolean; // true once out of the tournament (group non-qualifier OR lost a knockout tie)
   manual?: boolean; // true = moderator-edited; auto-sync won't overwrite it
 }
 

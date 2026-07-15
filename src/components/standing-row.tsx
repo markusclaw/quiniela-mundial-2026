@@ -7,9 +7,14 @@ import { useT } from "@/lib/i18n";
 import { TeamCrest } from "@/components/team-crest";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ownedTeamIds, type ParticipantStanding } from "@/lib/scoring";
+import {
+  ownedTeamIds,
+  isTeamEliminated,
+  type ParticipantStanding,
+} from "@/lib/scoring";
 import { getTeam } from "@/lib/data/teams";
 import { formatMoney, cn } from "@/lib/utils";
+import type { TeamResult } from "@/lib/types";
 
 export function RankBadge({
   rank,
@@ -30,6 +35,29 @@ export function RankBadge({
     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
       {rank}
     </div>
+  );
+}
+
+/** Small chip showing a team's furthest stage — muted once it's out. */
+function StageChip({ r }: { r?: TeamResult }) {
+  const { t } = useT();
+  if (!r) return null;
+  const out = isTeamEliminated(r);
+  const champ = r.stageReached === "champion";
+  const key = r.stageReached === "eliminated" ? "eliminated" : r.stageReached;
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide",
+        champ
+          ? "bg-gold/20 text-gold"
+          : out
+            ? "bg-muted text-muted-foreground"
+            : "bg-primary/10 text-primary",
+      )}
+    >
+      {t(`stageShort.${key}`)}
+    </span>
   );
 }
 
@@ -75,7 +103,7 @@ export function StandingRow({
           {isMe && <Badge variant="secondary">{t("lb.you")}</Badge>}
           <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto no-scrollbar">
             {teams.map((tid) => {
-              const out = state.results[tid]?.stageReached === "eliminated";
+              const out = isTeamEliminated(state.results[tid]);
               return (
                 <span
                   key={tid}
@@ -158,7 +186,7 @@ export function StandingRow({
                     const gf = r?.groupGoalsFor ?? 0;
                     const ga = r?.groupGoalsAgainst ?? 0;
                     const gd = gf - ga;
-                    const out = r?.stageReached === "eliminated";
+                    const out = isTeamEliminated(r);
                     return (
                       <tr
                         key={b.teamId}
@@ -170,9 +198,28 @@ export function StandingRow({
                         <td className="py-1.5 pl-3 pr-2">
                           <div className="flex min-w-0 items-center gap-2">
                             <TeamCrest teamId={b.teamId} size="xs" />
-                            <span className="truncate text-sm font-medium">
-                              {getTeam(b.teamId)?.name}
-                            </span>
+                            <div className="min-w-0">
+                              <span className="block truncate text-sm font-medium leading-tight">
+                                {getTeam(b.teamId)?.name}
+                              </span>
+                              <div className="mt-0.5 flex items-center gap-1">
+                                <StageChip r={r} />
+                                <span className="text-[10px] tabular-nums text-muted-foreground">
+                                  {t("lb.ptsSplit", {
+                                    g: b.groupPoints,
+                                    k: b.knockoutPoints,
+                                  })}
+                                </span>
+                                {b.multiplierApplied && (
+                                  <span
+                                    title={t("lb.underdogTip")}
+                                    className="rounded bg-amber-500/15 px-1 text-[9px] font-bold text-amber-600"
+                                  >
+                                    ×{state.scoring.underdogMultiplier}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td className={numTd}>{w + d + l}</td>

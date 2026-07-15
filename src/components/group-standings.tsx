@@ -7,7 +7,7 @@ import { TeamCrest } from "@/components/team-crest";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { GROUP_IDS, teamsByGroup } from "@/lib/data/teams";
-import { ownerMap } from "@/lib/scoring";
+import { ownerMap, isTeamEliminated } from "@/lib/scoring";
 import { fetchFixtures, type FixtureLite } from "@/lib/results-sync";
 import {
   fetchLive,
@@ -87,7 +87,7 @@ function GroupCard({
       const ga = r?.groupGoalsAgainst ?? 0;
       return {
         tm,
-        eliminated: r?.stageReached === "eliminated",
+        eliminated: isTeamEliminated(r),
         w,
         d,
         l,

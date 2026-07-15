@@ -186,6 +186,8 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
   let championId: string | null = null;
   let thirdId: string | null = null;
   let fourthId: string | null = null;
+  // Teams knocked out by losing a decided knockout tie (loser of R32…Final).
+  const eliminatedIds = new Set<string>();
 
   for (const m of matches) {
     const id1 = toId(m.team1);
@@ -253,6 +255,13 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       ensure(id1).goalsFor = (ensure(id1).goalsFor ?? 0) + score[0];
       ensure(id2).goalsFor = (ensure(id2).goalsFor ?? 0) + score[1];
     }
+    // The loser of any decided knockout tie is out of the tournament (the
+    // Final loser is the runner-up). We keep their stageReached intact so their
+    // points survive — only the `eliminated` flag flips.
+    if (score && id1 && id2) {
+      const winner = decisiveWinner(m, id1, id2);
+      if (winner) eliminatedIds.add(winner === id1 ? id2 : id1);
+    }
     // Champion = winner of the Final (penalties / extra time aware).
     if (ks.stage === "final" && id1 && id2) {
       const winner = decisiveWinner(m, id1, id2);
@@ -302,6 +311,17 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
   if (thirdId) ensure(thirdId).thirdPlace = true;
   if (fourthId) ensure(fourthId).fourthPlace = true;
 
+  // Flag knockout losers as eliminated (the champion is never eliminated, even
+  // if the feed's Final row is momentarily ambiguous).
+  for (const id of eliminatedIds) {
+    const t = out[id];
+    if (t && id !== championId) t.eliminated = true;
+  }
+  // Group-stage non-qualifiers are eliminated too (stageReached already set).
+  for (const t of Object.values(out)) {
+    if (t.stageReached === "eliminated") t.eliminated = true;
+  }
+
   // Mark remaining group-stage drop-outs as eliminated once the knockout
   // bracket has real names (catches the non-qualifying 3rd-place teams).
   if (knockoutResolved) {
@@ -325,6 +345,7 @@ export function computeResults(matches: RawMatch[]): SyncedResults {
       thirdPlace: !!t.thirdPlace,
       fourthPlace: !!t.fourthPlace,
       stageReached: t.stageReached,
+      eliminated: !!t.eliminated,
     };
   }
   return { results, playedGroupMatches, knockoutResolved };

@@ -115,7 +115,7 @@ function PackageCard({
       <CardContent className="space-y-2.5">
         {pkg.teamIds.map((tid) => (
           <div key={tid} className="flex items-center justify-between">
-            <TeamChip teamId={tid} />
+            <TeamChip teamId={tid} dimIfOut />
             <PotBadge teamId={tid} />
           </div>
         ))}
@@ -211,7 +211,7 @@ function TeamsView() {
             <CardContent className="space-y-2.5">
               {teamIds.map((tid) => (
                 <div key={tid} className="flex items-center justify-between">
-                  <TeamChip teamId={tid} />
+                  <TeamChip teamId={tid} dimIfOut />
                   <PotBadge teamId={tid} />
                 </div>
               ))}

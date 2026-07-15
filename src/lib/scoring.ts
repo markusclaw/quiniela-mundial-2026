@@ -279,11 +279,24 @@ function placeOwnerId(
   return teamId ? ownerOfTeamId(state, teamId) : null;
 }
 
-/** How many of a participant's teams advanced to the knockouts (R32+). */
+/**
+ * Whether a team is out of the tournament. `stageReached` always records the
+ * FURTHEST round a team reached (so its points are preserved even after it
+ * loses); this flag is what says it's actually been knocked out. Backwards
+ * compatible with older data that only set stageReached === "eliminated".
+ */
+export function isTeamEliminated(r: TeamResult | undefined | null): boolean {
+  if (!r) return false;
+  if (r.stageReached === "champion") return false;
+  return r.eliminated === true || r.stageReached === "eliminated";
+}
+
+/** How many of a participant's teams are still alive in the tournament. */
 export function teamsAlive(p: Participant, state: PoolState): number {
   return ownedTeamIds(p, state).filter((tid) => {
     const r = state.results[tid];
-    return r ? reachedAtLeast(r.stageReached, "r32") : false;
+    if (!r) return false;
+    return reachedAtLeast(r.stageReached, "r32") && !isTeamEliminated(r);
   }).length;
 }
 
